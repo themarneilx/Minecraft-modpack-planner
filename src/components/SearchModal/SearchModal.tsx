@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { StatusInfo } from '@/lib/data';
 import { MINECRAFT_VERSION_OPTIONS } from '@/lib/minecraft';
+import { buildModrinthSearchUrl, shouldAutoSearch } from '@/lib/search';
 import styles from './SearchModal.module.css';
 
 interface SearchResult {
@@ -40,6 +41,7 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
   const [error, setError] = useState('');
   const [addedUrls, setAddedUrls] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchRequestRef = useRef(0);
 
   // Manual add state
   const [manualName, setManualName] = useState('');
@@ -80,10 +82,28 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
     resetEntryState();
   }
 
-  async function handleSearch() {
-    if (!query.trim()) return;
+  function handleQueryChange(value: string) {
+    setQuery(value);
 
-    if (source === 'curseforge') {
+    if (!value.trim()) {
+      searchRequestRef.current += 1;
+      setResults([]);
+      setLoading(false);
+      setError('');
+    }
+  }
+
+  async function runSearch(searchQuery: string, searchSource: 'modrinth' | 'curseforge' | 'manual', searchVersion: string, searchLoader: string) {
+    const trimmedQuery = searchQuery.trim();
+
+    if (!trimmedQuery || searchSource === 'manual') return;
+
+    const requestId = searchRequestRef.current + 1;
+    searchRequestRef.current = requestId;
+
+    if (searchSource === 'curseforge') {
+      setLoading(false);
+      setResults([]);
       setError('curseforge');
       return;
     }
@@ -93,21 +113,31 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
     setResults([]);
 
     try {
-      const params = new URLSearchParams({ query: query.trim() });
-      if (version) params.set('version', version);
-      if (loader) params.set('loader', loader);
-
-      const res = await fetch(`/api/search/modrinth?${params}`);
+      const res = await fetch(buildModrinthSearchUrl(trimmedQuery, searchVersion, searchLoader));
       const data = await res.json();
 
+      if (requestId !== searchRequestRef.current) return;
       if (data.error) throw new Error(data.error);
       setResults(data.hits || []);
     } catch (err) {
+      if (requestId !== searchRequestRef.current) return;
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
-      setLoading(false);
+      if (requestId === searchRequestRef.current) {
+        setLoading(false);
+      }
     }
   }
+
+  useEffect(() => {
+    if (!open || !shouldAutoSearch(query, source)) return;
+
+    const timer = setTimeout(() => {
+      void runSearch(query, source, version, loader);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [open, query, source, version, loader]);
 
   async function handleAdd(mod: SearchResult) {
     await onAddMod(categoryId, {
@@ -217,11 +247,13 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
                 type="text"
                 placeholder="Search for mods..."
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                onChange={(e) => handleQueryChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void runSearch(query, source, version, loader);
+                }}
                 className={styles.searchInput}
               />
-              <button className={styles.searchBtn} onClick={handleSearch}>Search</button>
+              <button className={styles.searchBtn} onClick={() => void runSearch(query, source, version, loader)}>Search</button>
             </div>
 
             <div className={styles.filters}>

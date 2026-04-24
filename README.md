@@ -75,7 +75,7 @@ It is designed for one shared modpack that everyone sees at the same time: add m
 ### 1. Install dependencies
 
 ```bash
-git clone <themarneilx/Minecraft-modpack-planner>
+git clone themarneilx/Minecraft-modpack-planner
 cd Minecraft-modpack-planner
 npm install
 ```

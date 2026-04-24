@@ -1,4 +1,4 @@
-# ModCraft -- Collaborative Minecraft Modpack Builder
+# Tree Emporium's Collaborative Minecraft Modpack Builder
 
 A collaborative web app for planning Minecraft modpacks with friends. Search mods from Modrinth, organize by category, track mod status with custom color-coded legends, and save everything to PostgreSQL -- no accounts needed.
 

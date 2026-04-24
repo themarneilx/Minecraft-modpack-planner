@@ -13,9 +13,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'ModCraft — Collaborative Minecraft Modpack Builder',
+  title: "Tree Emporium's Modpack Planner",
   description:
-    'Plan and build Minecraft modpacks with your friends. Search mods from Modrinth and CurseForge, organize by category, and track mod status collaboratively.',
+    "Plan Tree Emporium's shared Minecraft modpack with live sync, category organization, and collaborative status tracking.",
 };
 
 export default function RootLayout({

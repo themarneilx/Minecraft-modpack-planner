@@ -11,10 +11,11 @@ interface SettingsModalProps {
   statuses: StatusInfo[];
   categories: Category[];
   onClose: () => void;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void>;
+  onSyncStart: () => () => void;
 }
 
-export default function SettingsModal({ open, statuses, categories, onClose, onRefresh }: SettingsModalProps) {
+export default function SettingsModal({ open, statuses, categories, onClose, onRefresh, onSyncStart }: SettingsModalProps) {
   const [tab, setTab] = useState<'statuses' | 'categories'>('statuses');
   const [editing, setEditing] = useState<StatusInfo | null>(null);
   const [creating, setCreating] = useState(false);
@@ -60,6 +61,7 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
       return;
     }
 
+    const finishSync = onSyncStart();
     setSaving(true);
     setError('');
 
@@ -88,16 +90,18 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
 
       setEditing(null);
       setCreating(false);
-      onRefresh();
+      await onRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setSaving(false);
+      finishSync();
     }
   }
 
   async function deleteStatus(id: number) {
     if (!confirm('Delete this status?')) return;
+    const finishSync = onSyncStart();
     try {
       const res = await fetch(`/api/statuses/${id}`, { method: 'DELETE' });
       if (!res.ok) {
@@ -105,9 +109,11 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
         alert(data.error || 'Failed to delete');
         return;
       }
-      onRefresh();
+      await onRefresh();
     } catch {
       alert('Failed to delete status');
+    } finally {
+      finishSync();
     }
   }
 
@@ -136,6 +142,7 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
       return;
     }
 
+    const finishSync = onSyncStart();
     setSaving(true);
     setError('');
 
@@ -158,25 +165,29 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
 
       setEditingCat(null);
       setCreatingCat(false);
-      onRefresh();
+      await onRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setSaving(false);
+      finishSync();
     }
   }
 
   async function deleteCat(id: number) {
     if (!confirm('Delete this category and all its mods?')) return;
+    const finishSync = onSyncStart();
     try {
       const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         alert('Failed to delete');
         return;
       }
-      onRefresh();
+      await onRefresh();
     } catch {
       alert('Failed to delete category');
+    } finally {
+      finishSync();
     }
   }
 

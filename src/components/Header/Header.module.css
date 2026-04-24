@@ -14,16 +14,44 @@
 .left { display: flex; align-items: center; gap: 16px; }
 
 .logo { display: flex; align-items: center; gap: 10px; }
-.logoIcon { font-size: 26px; }
+
+.logoIcon {
+  width: 36px;
+  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #f0faef, #d9f2d5);
+  box-shadow: inset 0 0 0 1px rgba(91, 145, 89, 0.16), 0 8px 18px rgba(77, 128, 74, 0.12);
+  flex: 0 0 auto;
+}
+
+.logoIcon svg {
+  width: 28px;
+  height: 28px;
+  overflow: visible;
+}
+
+.treeCanopyBack { fill: #b9e6ae; }
+.treeCanopyFront { fill: #75bd74; }
+.treeTrunk { fill: #9a704c; rx: 1.6px; }
+
+.treeGround {
+  fill: none;
+  stroke: #4d8c58;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
 
 .logoText {
   font-size: 22px;
   font-weight: 800;
-  background: linear-gradient(135deg, #7c6f9f, #e8837c);
+  background: linear-gradient(135deg, #2f6f44, #6faf68 55%, #9a704c);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  letter-spacing: -0.5px;
+  letter-spacing: 0;
+  line-height: 1.08;
 }
 
 .badge {
@@ -41,12 +69,23 @@
 
 .online { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 
+.onlineSyncing { color: #35664a; }
+
 .pulseDot {
   width: 8px;
   height: 8px;
   background: #66bb6a;
   border-radius: 50%;
   animation: pulse 2s infinite;
+}
+
+.syncSpinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(86, 156, 102, 0.2);
+  border-top-color: #66bb6a;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 .onlineText { white-space: nowrap; }

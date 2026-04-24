@@ -62,9 +62,18 @@
   color: var(--text-muted);
   font-size: 12px;
   gap: 4px;
+  border: 1px dashed transparent;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .empty svg { opacity: 0.4; }
+
+.emptyDropActive {
+  color: #35664a;
+  background: rgba(168, 230, 207, 0.2);
+  border-color: rgba(53, 102, 74, 0.35);
+}
 
 /* Mod Item */
 .modItem {
@@ -73,11 +82,43 @@
   gap: 8px;
   padding: 7px 10px;
   border-radius: var(--radius-sm);
-  transition: background 0.15s;
-  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s, transform 0.15s, box-shadow 0.15s;
+  cursor: grab;
 }
 
 .modItem:hover { background: var(--bg-hover); }
+.modItem:active { cursor: grabbing; }
+
+.modItemDragging {
+  opacity: 0.45;
+  transform: scale(0.98);
+  background: rgba(168, 230, 207, 0.22);
+}
+
+.dragHandle {
+  display: inline-flex;
+  color: var(--text-muted);
+  opacity: 0.55;
+  flex: 0 0 auto;
+}
+
+.modItem:hover .dragHandle { opacity: 1; }
+
+.dropIndicator {
+  height: 4px;
+  margin: 0 6px;
+  border-radius: 999px;
+  background: transparent;
+  transition: height 0.12s, background 0.12s, margin 0.12s;
+}
+
+.dropIndicatorActive {
+  height: 8px;
+  margin: 2px 6px;
+  background: linear-gradient(90deg, rgba(168, 230, 207, 0), #75bd74, rgba(168, 230, 207, 0));
+}
+
+.endDropIndicator { margin-bottom: 2px; }
 
 .statusDot {
   width: 10px;

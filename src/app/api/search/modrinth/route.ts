@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'ModCraft/1.0.0 (modpack-builder)' },
+      headers: { 'User-Agent': 'TreeEmporiumsModpackPlanner/1.0.0 (modpack-builder)' },
     });
 
     if (!res.ok) {

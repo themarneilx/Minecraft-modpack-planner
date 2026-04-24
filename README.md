@@ -1,8 +1,10 @@
-# Tree Emporium's Collaborative Minecraft Modpack Builder
+# Tree Emporium's Modpack Planner
 
-A collaborative web app for planning Minecraft modpacks with friends. Search mods from Modrinth, organize by category, track mod status with custom color-coded legends, and save everything to PostgreSQL -- no accounts needed.
+A shared Minecraft modpack planning board built with Next.js, React, Prisma, PostgreSQL, and WebSockets.
 
-> Built as a better alternative to messy Google Sheets modpack planning.
+It is designed for one shared modpack that everyone sees at the same time: add mods, organize them into categories, manage a custom status legend, and watch changes sync live across every open client without refreshing.
+
+> Built as a cleaner replacement for tracking modpacks in Google Sheets.
 
 ![Status](https://img.shields.io/badge/status-in%20development-blueviolet)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -11,248 +13,247 @@ A collaborative web app for planning Minecraft modpacks with friends. Search mod
 
 ## Features
 
-### Core
-- **Custom Categories** -- Add, edit, rename, and color-code your own mod categories (columns)
-- **Custom Statuses** -- Create your own status legend with custom labels and colors (both background and text)
-- **PostgreSQL Persistence** -- All data saved to a database using Prisma ORM, no more localStorage
-- **Inline Editing** -- Click to edit the modpack name, Minecraft version, and mod loader directly in the UI
-- **Mod Management** -- Add, remove, and change status of individual mods per category
-- **Modrinth Search** -- Search mods from Modrinth API with version and loader filters
-- **CurseForge Ready** -- CurseForge search tab included (requires API key)
+### Planning and Organization
+- **Single shared modpack board** with no accounts or rooms
+- **Custom categories** with editable names, icons, and header colors
+- **Custom statuses** with editable keys, labels, background colors, and text colors
+- **One primary status per mod** for quick board scanning
+- **Manual mod entry** for anything not added through search
+
+### Mod Search
+- **Modrinth search** through a server-side API route
+- **Version and loader filtering** in the search modal
+- **Centralized Minecraft version list** from `1.12` through `26.1.2`
+- **CurseForge tab placeholder** in the UI with API-key guidance, but no live CurseForge search yet
+
+### Pack Metadata
+- **Editable pack name** directly in the header
+- **Minecraft version dropdown** that saves immediately on change
+- **Loader dropdown** for `Fabric`, `Forge`, `NeoForge`, and `Quilt`
+- **Default pack target** set to `Minecraft 26.1.2`
+
+### Realtime Collaboration
+- **Automatic save** for pack metadata and all CRUD changes
+- **Realtime sync for all connected users** via WebSockets
+- **No manual refresh needed** after mod, status, category, or pack changes
+- **Last write wins** conflict behavior
 
 ### UI
-- **Pastel Color Palette** -- Soft, readable colors for both statuses and category headers
-- **Color Picker** -- Full hex color picker in the Settings modal for status and category customization
-- **Live Preview** -- See your color/label changes before saving
-- **Responsive Layout** -- Works on desktop and mobile
-- **Settings Modal** -- Manage statuses and categories from a single tabbed modal
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- PostgreSQL 14+ (running locally or remotely)
-
-### 1. Clone and Install
-
-```bash
-git clone https://github.com/your-username/modpack-maker.git
-cd modpack-maker
-npm install
-```
-
-### 2. PostgreSQL Database Setup
-
-Make sure PostgreSQL is running, then create a database and user:
-
-```bash
-# Connect to PostgreSQL as superuser
-psql -U postgres
-```
-
-```sql
--- Create the database
-CREATE DATABASE modpack;
-
--- Create a dedicated user (change password as needed)
-CREATE USER marneilx WITH PASSWORD 'your_password_here';
-
--- Grant permissions
-GRANT ALL PRIVILEGES ON DATABASE modpack TO marneilx;
-ALTER DATABASE modpack OWNER TO marneilx;
-```
-
-### 3. Configure Environment
-
-Create a `.env` file in the project root (or edit the existing one):
-
-```env
-DATABASE_URL="postgresql://marneilx:your_password_here@localhost:5432/modpack"
-```
-
-### 4. Prisma Setup
-
-This project uses **Prisma 7** with a driver adapter (`@prisma/adapter-pg`). The configuration lives in two places:
-
-| File | Purpose |
-|------|---------|
-| `prisma/schema.prisma` | Database schema (models, relations) |
-| `prisma.config.ts` | CLI config (connection URL for migrations/push) |
-| `src/lib/prisma.ts` | Runtime client singleton (uses `PrismaPg` adapter) |
-
-Push the schema to the database:
-
-```bash
-npx prisma db push
-```
-
-Generate the Prisma Client:
-
-```bash
-npx prisma generate
-```
-
-### 5. Seed Initial Data
-
-The seed script populates default statuses (11 color-coded), categories (9 columns), and sample mods:
-
-```bash
-npx tsx prisma/seed.ts
-```
-
-You can re-run this anytime to reset the database to its default state.
-
-### 6. Run the Dev Server
-
-```bash
-npm run dev
-```
-
-Visit `http://localhost:3000`
-
-### Production Build
-
-```bash
-npm run build
-npm start
-```
-
-### Common Issues
-
-| Problem | Fix |
-|---------|-----|
-| `PrismaClientInitializationError` | Check your `DATABASE_URL` in `.env` matches your PostgreSQL credentials |
-| `Cannot find module '@prisma/client'` | Run `npx prisma generate` |
-| `relation "statuses" does not exist` | Run `npx prisma db push` to create the tables |
-| Empty page (no categories) | Run `npx tsx prisma/seed.ts` to populate initial data |
-
----
-
-## Project Structure
-
-```
-modpack-maker/
-├── prisma/
-│   ├── schema.prisma           # Database schema (PackInfo, Status, Category, Mod)
-│   └── seed.ts                 # Seed script for initial data
-├── prisma.config.ts            # Prisma 7 CLI configuration
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── data/route.ts           # GET all data (statuses + categories + mods + pack info)
-│   │   │   ├── pack/route.ts           # GET/PUT pack info (name, version, loader)
-│   │   │   ├── statuses/route.ts       # GET/POST statuses
-│   │   │   ├── statuses/[id]/route.ts  # PUT/DELETE individual status
-│   │   │   ├── categories/route.ts     # GET/POST categories
-│   │   │   ├── categories/[id]/route.ts# PUT/DELETE individual category
-│   │   │   ├── mods/route.ts           # POST new mod
-│   │   │   ├── mods/[id]/route.ts      # PUT/DELETE individual mod
-│   │   │   └── search/modrinth/route.ts# Modrinth API proxy
-│   │   ├── globals.css                 # Design tokens and global styles
-│   │   ├── layout.tsx                  # Root layout with fonts
-│   │   ├── page.tsx                    # Main page (state orchestrator)
-│   │   └── page.module.css             # Page-level styles
-│   ├── components/
-│   │   ├── CategoryCard/               # Mod category card with mod list
-│   │   ├── Header/                     # App header with legend toggle
-│   │   ├── Legend/                      # Collapsible status legend panel
-│   │   ├── SearchModal/                # Modrinth/CurseForge search modal
-│   │   ├── SettingsModal/              # Status and category CRUD with color pickers
-│   │   └── StatusPicker/               # Status selection modal
-│   └── lib/
-│       ├── data.ts                     # TypeScript type definitions
-│       └── prisma.ts                   # Prisma client singleton
-├── .env                                # Database connection string
-├── tsconfig.json
-├── package.json
-└── README.md
-```
-
----
-
-## Database Schema
-
-```
-PackInfo     -- name, mc_version, loader
-Status       -- key, label, color, text_color, sort_order
-Category     -- name, icon, header_bg, sort_order
-Mod          -- name, status_key (FK), category_id (FK), source, url, sort_order
-```
-
-- **Status <-> Mod**: One-to-many (a status can be used by many mods)
-- **Category <-> Mod**: One-to-many with cascade delete
-
----
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/data` | Fetch all statuses, categories (with mods), and pack info |
-| GET | `/api/pack` | Get pack info |
-| PUT | `/api/pack` | Update pack name, version, or loader |
-| GET | `/api/statuses` | List all statuses |
-| POST | `/api/statuses` | Create a new status |
-| PUT | `/api/statuses/:id` | Update a status (label, colors, key) |
-| DELETE | `/api/statuses/:id` | Delete a status (fails if mods use it) |
-| GET | `/api/categories` | List all categories with mods |
-| POST | `/api/categories` | Create a new category |
-| PUT | `/api/categories/:id` | Update a category (name, icon, color) |
-| DELETE | `/api/categories/:id` | Delete a category (cascades to mods) |
-| POST | `/api/mods` | Create a new mod |
-| PUT | `/api/mods/:id` | Update a mod (status, name, source, url) |
-| DELETE | `/api/mods/:id` | Delete a mod |
-| GET | `/api/search/modrinth` | Search Modrinth API (proxy) |
+- **Pastel green visual direction** with soft, readable surfaces
+- **Responsive layout** for desktop and mobile
+- **Settings modal** for managing statuses and categories
+- **Live color preview** while editing legend and category styles
 
 ---
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 16 (App Router) |
-| Language | TypeScript (strict mode) |
-| ORM | Prisma 7 with `@prisma/adapter-pg` |
+|-------|------------|
+| Framework | Next.js 16.2.4 (App Router) |
+| Runtime | Custom Node server (`server.mjs`) hosting Next.js and `/ws` |
+| UI | React 19.2.4 + CSS Modules |
+| Language | TypeScript |
 | Database | PostgreSQL |
-| Styling | CSS Modules + CSS Custom Properties |
-| Fonts | Inter, JetBrains Mono (via `next/font`) |
-| APIs | Modrinth v2 |
+| ORM | Prisma 7 with `@prisma/adapter-pg` |
+| Realtime | `ws` WebSocket server |
+| Search | Modrinth API proxy route |
+
+---
+
+## Requirements
+
+- Node.js `20.9.0` or newer
+- PostgreSQL `14+`
+
+`next@16.2.4` requires Node `>=20.9.0`.
+
+---
+
+## Getting Started
+
+### 1. Install dependencies
+
+```bash
+git clone <themarneilx/Minecraft-modpack-planner>
+cd Minecraft-modpack-planner
+npm install
+```
+
+### 2. Configure the database
+
+Create a PostgreSQL database, then add a `.env` file in the project root:
+
+```env
+DATABASE_URL="postgresql://username:password@localhost:5432/modpack"
+```
+
+### 3. Push the schema and generate Prisma Client
+
+```bash
+npx prisma db push
+npx prisma generate
+```
+
+### 4. Seed starter data
+
+```bash
+npx tsx prisma/seed.ts
+```
+
+This seeds:
+- a default pack
+- starter statuses
+- starter categories
+- sample mods
+
+### 5. Start the app
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+`npm run dev` starts the custom Node server, not plain `next dev`. That server hosts both the Next.js app and the WebSocket endpoint used for live sync.
+
+### Production
+
+```bash
+npm run build
+npm start
+```
+
+---
+
+## How Realtime Sync Works
+
+- All writes still go through the existing REST API routes.
+- After a successful mutation, the server broadcasts `app-data-updated` over `/ws`.
+- Connected clients refetch `/api/data` and update in place.
+- The current scope is one shared modpack for everyone.
+
+---
+
+## Project Structure
+
+```text
+modpack-maker/
+├── prisma/
+│   ├── schema.prisma
+│   └── seed.ts
+├── server.mjs                     # Custom Node server + WebSocket host
+├── prisma.config.ts               # Prisma 7 CLI config
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── data/route.ts
+│   │   │   ├── pack/route.ts
+│   │   │   ├── statuses/route.ts
+│   │   │   ├── statuses/[id]/route.ts
+│   │   │   ├── categories/route.ts
+│   │   │   ├── categories/[id]/route.ts
+│   │   │   ├── mods/route.ts
+│   │   │   ├── mods/[id]/route.ts
+│   │   │   └── search/modrinth/route.ts
+│   │   ├── layout.tsx
+│   │   ├── page.tsx               # Main shared board + websocket client
+│   │   └── page.module.css
+│   ├── components/
+│   │   ├── CategoryCard/
+│   │   ├── Header/
+│   │   ├── Legend/
+│   │   ├── SearchModal/
+│   │   ├── SettingsModal/
+│   │   └── StatusPicker/
+│   ├── lib/
+│   │   ├── data.ts
+│   │   ├── minecraft.ts           # Shared Minecraft version options
+│   │   └── prisma.ts
+│   └── server/
+│       └── realtime.ts            # Broadcast helper used by route handlers
+├── package.json
+└── README.md
+```
+
+---
+
+## API Overview
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/data` | Fetch pack info, statuses, categories, and mods |
+| GET | `/api/pack` | Fetch pack metadata |
+| PUT | `/api/pack` | Update pack name, version, or loader |
+| GET | `/api/statuses` | List statuses |
+| POST | `/api/statuses` | Create a status |
+| PUT | `/api/statuses/:id` | Update a status |
+| DELETE | `/api/statuses/:id` | Delete a status |
+| GET | `/api/categories` | List categories |
+| POST | `/api/categories` | Create a category |
+| PUT | `/api/categories/:id` | Update a category |
+| DELETE | `/api/categories/:id` | Delete a category |
+| POST | `/api/mods` | Create a mod |
+| PUT | `/api/mods/:id` | Update a mod |
+| DELETE | `/api/mods/:id` | Delete a mod |
+| GET | `/api/search/modrinth` | Search Modrinth |
+
+All mutating routes broadcast a realtime invalidation event after successful writes.
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `PrismaClientInitializationError` | Check `DATABASE_URL` and confirm PostgreSQL is running |
+| `Cannot find module '@prisma/client'` | Run `npx prisma generate` |
+| Missing tables | Run `npx prisma db push` |
+| Empty board after setup | Run `npx tsx prisma/seed.ts` |
+| Realtime sync not working | Start the app with `npm run dev` or `npm start`, not plain `next dev` or `next start` |
+
+---
+
+## Verification
+
+Useful local checks:
+
+```bash
+npx tsc --noEmit
+npm run build
+```
+
+There is currently no dedicated app test suite in `package.json`.
 
 ---
 
 ## Roadmap
 
 - [x] Category-based mod organization
-- [x] Color-coded status system
-- [x] Modrinth API search (server-side proxy)
-- [x] Status picker modal
-- [x] PostgreSQL database persistence (Prisma)
-- [x] Custom status CRUD with color picker
-- [x] Custom category CRUD with color picker
-- [x] Inline editable pack name, MC version, and loader
-- [x] Responsive design
-- [x] TypeScript with strict mode
-- [ ] CurseForge API integration (needs key)
-- [ ] Real-time collaborative editing (WebSockets)
+- [x] Custom status legend with editable colors
+- [x] PostgreSQL persistence with Prisma
+- [x] Modrinth search via API proxy
+- [x] Manual mod entry
+- [x] Editable pack name
+- [x] Minecraft version and loader dropdowns with autosave
+- [x] Shared realtime sync over WebSockets
+- [x] Responsive layout
+- [ ] Live CurseForge integration
+- [ ] Multiple indicators or multi-status support per mod
 - [ ] Drag-and-drop mod reordering
 - [ ] Export modpack as `.txt` or `.json`
-- [ ] Mod dependency auto-detection
-- [ ] Deploy to Netlify / Vercel
+- [ ] Multi-pack rooms instead of one global board
 
 ---
 
 ## Contributing
 
-This is a personal project for me and my friends, but contributions are welcome!
+This project was built for Tree Emporium's modpack planning workflow, but contributions are still welcome.
 
 1. Fork the repo
-2. Create a feature branch (`git checkout -b feature/cool-thing`)
-3. Commit your changes (`git commit -m 'Add cool thing'`)
-4. Push to the branch (`git push origin feature/cool-thing`)
-5. Open a Pull Request
+2. Create a branch
+3. Make your changes
+4. Open a pull request
 
 ---
 
@@ -263,6 +264,6 @@ MIT License -- do whatever you want with it.
 ---
 
 <p align="center">
-  Made for Minecraft modpack planning<br>
-  <em>Because Google Sheets wasn't built for this.</em>
+  Built for shared Minecraft modpack planning<br>
+  <em>Because Google Sheets wasn't built for this either.</em>
 </p>

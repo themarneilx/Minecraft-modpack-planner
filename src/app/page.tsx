@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, startTransition } from 'react';
+import { useState, useEffect, useRef, startTransition } from 'react';
 import Header from '@/components/Header/Header';
 import CategoryCard from '@/components/CategoryCard/CategoryCard';
 import SearchModal from '@/components/SearchModal/SearchModal';
 import StatusPicker from '@/components/StatusPicker/StatusPicker';
 import SettingsModal from '@/components/SettingsModal/SettingsModal';
-import type { AppData, Category, StatusInfo } from '@/lib/data';
+import type { AppData, Mod } from '@/lib/data';
 import { MINECRAFT_VERSION_OPTIONS } from '@/lib/minecraft';
+import { upsertModInCategory } from '@/lib/mod-list';
 import { moveModInCategories, type DragLocation, type DropLocation } from '@/lib/reorder';
 import styles from './page.module.css';
 
@@ -21,6 +22,7 @@ export default function Home() {
   // Search modal
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchCategoryId, setSearchCategoryId] = useState(0);
+  const [searchSession, setSearchSession] = useState(0);
 
   // Status picker
   const [statusOpen, setStatusOpen] = useState(false);
@@ -42,7 +44,7 @@ export default function Home() {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSyncCountRef = useRef(0);
 
-  const beginSync = useCallback(() => {
+  function beginSync() {
     activeSyncCountRef.current += 1;
     setIsSyncing(true);
 
@@ -52,9 +54,9 @@ export default function Home() {
         setIsSyncing(false);
       }
     };
-  }, []);
+  }
 
-  const fetchData = useCallback(async () => {
+  async function fetchData() {
     if (isFetchingRef.current) {
       pendingRefreshRef.current = true;
       return;
@@ -84,11 +86,13 @@ export default function Home() {
         void fetchData();
       }
     }
-  }, [beginSync]);
+  }
 
   useEffect(() => {
     void fetchData();
-  }, [fetchData]);
+    // The initial load uses refs and stable state setters; it should only run once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -124,7 +128,9 @@ export default function Home() {
       }
       socket?.close();
     };
-  }, [fetchData]);
+    // The websocket subscription is intentionally created once and calls the ref-backed fetch path.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ===== Pack Info =====
   async function savePackField(field: string, value: string) {
@@ -167,6 +173,7 @@ export default function Home() {
   // ===== Mods =====
   function handleAddMod(categoryId: number) {
     setSearchCategoryId(categoryId);
+    setSearchSession((current) => current + 1);
     setSearchOpen(true);
   }
 
@@ -181,6 +188,15 @@ export default function Home() {
       });
 
       if (res.ok) {
+        const createdMod: Mod = await res.json();
+        startTransition(() => {
+          setData((current) => current
+            ? {
+                ...current,
+                categories: upsertModInCategory(current.categories, categoryId, createdMod),
+              }
+            : current);
+        });
         await fetchData();
       }
     } finally {
@@ -416,6 +432,7 @@ export default function Home() {
 
       {/* Modals */}
       <SearchModal
+        key={searchSession}
         open={searchOpen}
         categoryId={searchCategoryId}
         statuses={data.statuses}

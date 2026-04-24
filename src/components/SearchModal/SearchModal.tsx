@@ -20,7 +20,7 @@ interface SearchModalProps {
   categoryId: number;
   statuses: StatusInfo[];
   onClose: () => void;
-  onAddMod: (categoryId: number, mod: { name: string; statusKey: string; source: string; url: string }) => void;
+  onAddMod: (categoryId: number, mod: { name: string; statusKey: string; source: string; url: string }) => Promise<void> | void;
 }
 
 function formatNumber(n: number): string {
@@ -51,21 +51,34 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
   const defaultStatusKey = statuses.find((s) => s.key === source)?.key || statuses[0]?.key || 'added';
 
   useEffect(() => {
-    if (open) {
-      setQuery('');
-      setResults([]);
-      setError('');
-      setAddedUrls(new Set());
-      setManualName('');
-      setManualUrl('');
-      setManualAdded(false);
+    if (!open) return;
+
+    const timer = setTimeout(() => {
       if (source === 'manual') {
-        setTimeout(() => manualInputRef.current?.focus(), 100);
+        manualInputRef.current?.focus();
       } else {
-        setTimeout(() => inputRef.current?.focus(), 100);
+        inputRef.current?.focus();
       }
-    }
+    }, 100);
+
+    return () => clearTimeout(timer);
   }, [open, source]);
+
+  function resetEntryState() {
+    setQuery('');
+    setResults([]);
+    setLoading(false);
+    setError('');
+    setAddedUrls(new Set());
+    setManualName('');
+    setManualUrl('');
+    setManualAdded(false);
+  }
+
+  function handleSourceChange(nextSource: 'modrinth' | 'curseforge' | 'manual') {
+    setSource(nextSource);
+    resetEntryState();
+  }
 
   async function handleSearch() {
     if (!query.trim()) return;
@@ -96,8 +109,8 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
     }
   }
 
-  function handleAdd(mod: SearchResult) {
-    onAddMod(categoryId, {
+  async function handleAdd(mod: SearchResult) {
+    await onAddMod(categoryId, {
       name: mod.name,
       statusKey: defaultStatusKey,
       source: mod.source,
@@ -106,9 +119,9 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
     setAddedUrls((prev) => new Set([...prev, mod.url]));
   }
 
-  function handleManualAdd() {
+  async function handleManualAdd() {
     if (!manualName.trim()) return;
-    onAddMod(categoryId, {
+    await onAddMod(categoryId, {
       name: manualName.trim(),
       statusKey: statuses[0]?.key || 'added',
       source: 'manual',
@@ -142,19 +155,19 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
         <div className={styles.tabs}>
           <button
             className={`${styles.tab} ${source === 'modrinth' ? styles.tabActive : ''}`}
-            onClick={() => setSource('modrinth')}
+            onClick={() => handleSourceChange('modrinth')}
           >
             <span className={`${styles.sourceDot} ${styles.modrinthDot}`} /> Modrinth
           </button>
           <button
             className={`${styles.tab} ${source === 'curseforge' ? styles.tabActive : ''}`}
-            onClick={() => setSource('curseforge')}
+            onClick={() => handleSourceChange('curseforge')}
           >
             <span className={`${styles.sourceDot} ${styles.curseforgeDot}`} /> CurseForge
           </button>
           <button
             className={`${styles.tab} ${source === 'manual' ? styles.tabActive : ''}`}
-            onClick={() => setSource('manual')}
+            onClick={() => handleSourceChange('manual')}
           >
             <span className={`${styles.sourceDot} ${styles.manualDot}`} /> Manual
           </button>

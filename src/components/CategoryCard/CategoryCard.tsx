@@ -1,6 +1,6 @@
 'use client';
 
-import type { DragEvent } from 'react';
+import { createElement, type DragEvent } from 'react';
 import type { Category, Mod, StatusInfo } from '@/lib/data';
 import type { DropLocation } from '@/lib/reorder';
 import { getIcon } from '@/lib/icons';
@@ -73,7 +73,7 @@ export default function CategoryCard({
     <div className={styles.card} data-category-id={category.id}>
       <div className={styles.header} style={{ background: category.headerBg }}>
         <h3 className={styles.title}>
-          <span className={styles.icon}>{(() => { const Icon = getIcon(category.icon); return <Icon size={16} />; })()}</span>
+          <span className={styles.icon}>{createElement(getIcon(category.icon), { size: 16 })}</span>
           {category.name}
         </h3>
         <span className={styles.count}>{category.mods.length}</span>

@@ -18,6 +18,7 @@ It is designed for one shared modpack that everyone sees at the same time: add m
 - **Custom categories** with editable names, icons, and header colors
 - **Custom statuses** with editable keys, labels, background colors, and text colors
 - **One primary status per mod** for quick board scanning
+- **Drag-and-drop mod reordering** within a category or into another category column
 - **Manual mod entry** for anything not added through search
 
 ### Mod Search
@@ -35,7 +36,7 @@ It is designed for one shared modpack that everyone sees at the same time: add m
 ### Realtime Collaboration
 - **Automatic save** for pack metadata and all CRUD changes
 - **Realtime sync for all connected users** via WebSockets
-- **No manual refresh needed** after mod, status, category, or pack changes
+- **No manual refresh needed** after mod, status, category, reorder, or pack changes
 - **Last write wins** conflict behavior
 
 ### UI
@@ -155,6 +156,7 @@ modpack-maker/
 │   │   │   ├── categories/[id]/route.ts
 │   │   │   ├── mods/route.ts
 │   │   │   ├── mods/[id]/route.ts
+│   │   │   ├── mods/reorder/route.ts
 │   │   │   └── search/modrinth/route.ts
 │   │   ├── layout.tsx
 │   │   ├── page.tsx               # Main shared board + websocket client
@@ -169,7 +171,9 @@ modpack-maker/
 │   ├── lib/
 │   │   ├── data.ts
 │   │   ├── minecraft.ts           # Shared Minecraft version options
-│   │   └── prisma.ts
+│   │   ├── mod-list.ts            # Client-side mod insertion helper
+│   │   ├── prisma.ts
+│   │   └── reorder.ts             # Drag-and-drop reorder helper
 │   └── server/
 │       └── realtime.ts            # Broadcast helper used by route handlers
 ├── package.json
@@ -196,9 +200,25 @@ modpack-maker/
 | POST | `/api/mods` | Create a mod |
 | PUT | `/api/mods/:id` | Update a mod |
 | DELETE | `/api/mods/:id` | Delete a mod |
+| PATCH | `/api/mods/reorder` | Move or reorder mods across categories |
 | GET | `/api/search/modrinth` | Search Modrinth |
 
 All mutating routes broadcast a realtime invalidation event after successful writes.
+
+### Mod Reorder Payload
+
+`PATCH /api/mods/reorder` accepts the affected category order after a drag-and-drop move:
+
+```json
+{
+  "categories": [
+    { "categoryId": 1, "modIds": [10, 11, 12] },
+    { "categoryId": 2, "modIds": [20, 13, 21] }
+  ]
+}
+```
+
+The route updates each listed mod's `categoryId` and `sortOrder` in one transaction, then broadcasts the realtime sync event.
 
 ---
 
@@ -219,11 +239,13 @@ All mutating routes broadcast a realtime invalidation event after successful wri
 Useful local checks:
 
 ```bash
+node --import tsx --test src/lib/mod-list.test.ts
+node --import tsx --test src/lib/reorder.test.ts
 npx tsc --noEmit
 npm run build
 ```
 
-There is currently no dedicated app test suite in `package.json`.
+There is currently no `npm test` script in `package.json`; the focused helper tests above are run directly with Node's test runner.
 
 ---
 
@@ -237,10 +259,10 @@ There is currently no dedicated app test suite in `package.json`.
 - [x] Editable pack name
 - [x] Minecraft version and loader dropdowns with autosave
 - [x] Shared realtime sync over WebSockets
+- [x] Drag-and-drop mod reordering
 - [x] Responsive layout
 - [ ] Live CurseForge integration
 - [ ] Multiple indicators or multi-status support per mod
-- [ ] Drag-and-drop mod reordering
 - [ ] Export modpack as `.txt` or `.json`
 - [ ] Multi-pack rooms instead of one global board
 

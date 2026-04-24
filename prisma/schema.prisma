@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model PackInfo {
+  id        Int      @id @default(autoincrement())
+  name      String   @default("Untitled Modpack")
+  mcVersion String   @default("26.1.2") @map("mc_version")
+  loader    String   @default("Fabric")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("pack_info")
+}
+
+model Status {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  label     String
+  color     String
+  textColor String   @map("text_color")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  mods      Mod[]
+
+  @@map("statuses")
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  name      String
+  icon      String
+  headerBg  String   @map("header_bg")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  mods      Mod[]
+
+  @@map("categories")
+}
+
+model Mod {
+  id         Int      @id @default(autoincrement())
+  name       String
+  statusKey  String   @map("status_key")
+  source     String   @default("")
+  url        String   @default("")
+  sortOrder  Int      @default(0) @map("sort_order")
+  categoryId Int      @map("category_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  status   Status   @relation(fields: [statusKey], references: [key])
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@map("mods")
+}

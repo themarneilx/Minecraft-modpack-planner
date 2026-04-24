@@ -1,0 +1,36 @@
+.panel {
+  max-height: 0;
+  overflow: hidden;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s;
+  padding: 0 28px;
+}
+
+.open {
+  max-height: 120px;
+  padding: 14px 28px;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}

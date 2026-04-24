@@ -1,0 +1,96 @@
+/* ========== CSS Variables & Design Tokens ========== */
+:root {
+  --bg: #f8f6f3;
+  --bg-card: #ffffff;
+  --bg-hover: #f1efec;
+  --text: #2d2a26;
+  --text-secondary: #6b6560;
+  --text-muted: #a09a94;
+  --border: #e8e4df;
+  --border-light: #f0ece7;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.06), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --font: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --accent: #7c6f9f;
+  --accent-light: #9b8ec4;
+
+  /* Pastel status colors */
+  --status-modrinth: #a8e6cf;
+  --status-modrinth-text: #1b5e3b;
+  --status-curseforge: #ffcc80;
+  --status-curseforge-text: #7a4a00;
+  --status-fabric: #d4a5ff;
+  --status-fabric-text: #4a1a7a;
+  --status-added: #fff9c4;
+  --status-added-text: #6d6200;
+  --status-removed: #ff8a80;
+  --status-removed-text: #7a1a10;
+  --status-unused: #ffe0b2;
+  --status-unused-text: #7a5200;
+  --status-pending-addition: #b2ebf2;
+  --status-pending-addition-text: #00626e;
+  --status-fabric-added: #c5e1a5;
+  --status-fabric-added-text: #3a5e1a;
+  --status-dans-picks: #90caf9;
+  --status-dans-picks-text: #0d3c6e;
+  --status-pending-removal: #ffab91;
+  --status-pending-removal-text: #6e2a10;
+  --status-install-own: #9fa8da;
+  --status-install-own-text: #1a237e;
+
+  /* Category header colors */
+  --cat-vanilla: #e8f5e9;
+  --cat-decoration: #fce4ec;
+  --cat-tech: #e3f2fd;
+  --cat-create: #fff3e0;
+  --cat-magic: #f3e5f5;
+  --cat-addons: #e0f7fa;
+  --cat-optimization: #fff8e1;
+  --cat-dependencies: #fbe9e7;
+  --cat-worldgen: #e8eaf6;
+}
+
+/* ========== Reset & Base ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ========== Scrollbar ========== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ========== Animations ========== */
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(102,187,106,0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(102,187,106,0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

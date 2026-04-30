@@ -9,7 +9,13 @@ import SettingsModal from '@/components/SettingsModal/SettingsModal';
 import type { AppData, Mod } from '@/lib/data';
 import { MINECRAFT_VERSION_OPTIONS } from '@/lib/minecraft';
 import { upsertModInCategory } from '@/lib/mod-list';
-import { moveModInCategories, type DragLocation, type DropLocation } from '@/lib/reorder';
+import {
+  moveCategoryInList,
+  moveModInCategories,
+  type CategoryDropLocation,
+  type DragLocation,
+  type DropLocation,
+} from '@/lib/reorder';
 import styles from './page.module.css';
 
 const LOADER_OPTIONS = ['Fabric', 'Forge', 'NeoForge', 'Quilt'] as const;
@@ -34,6 +40,8 @@ export default function Home() {
   // Drag-and-drop mod ordering
   const [dragState, setDragState] = useState<DragLocation | null>(null);
   const [activeDropTarget, setActiveDropTarget] = useState<DropLocation | null>(null);
+  const [draggingCategoryId, setDraggingCategoryId] = useState<number | null>(null);
+  const [activeCategoryDropTarget, setActiveCategoryDropTarget] = useState<CategoryDropLocation | null>(null);
 
   // Pack info editing
   const [packName, setPackName] = useState('');
@@ -324,6 +332,84 @@ export default function Home() {
     }
   }
 
+  function handleCategoryDragStart(categoryId: number) {
+    setDraggingCategoryId(categoryId);
+    setActiveCategoryDropTarget(null);
+    handleModDragEnd();
+  }
+
+  function handleCategoryDragEnd() {
+    setDraggingCategoryId(null);
+    setActiveCategoryDropTarget(null);
+  }
+
+  function handleCategoryDragOver(beforeCategoryId: number | null) {
+    if (draggingCategoryId === null) return;
+
+    setActiveCategoryDropTarget((current) => {
+      if (current?.beforeCategoryId === beforeCategoryId) {
+        return current;
+      }
+
+      return { beforeCategoryId };
+    });
+  }
+
+  async function handleCategoryDrop(beforeCategoryId: number | null) {
+    if (!data || draggingCategoryId === null) {
+      handleCategoryDragEnd();
+      return;
+    }
+
+    let nextData: AppData;
+    let categoryIds: number[];
+
+    try {
+      const result = moveCategoryInList(data.categories, draggingCategoryId, beforeCategoryId);
+      nextData = { ...data, categories: result.categories };
+      categoryIds = result.categoryIds;
+    } catch (error) {
+      console.error('Failed to compute category reorder:', error);
+      handleCategoryDragEnd();
+      return;
+    }
+
+    const currentCategoryIds = data.categories.map((category) => category.id);
+    const changed = currentCategoryIds.length !== categoryIds.length ||
+      currentCategoryIds.some((categoryId, index) => categoryId !== categoryIds[index]);
+
+    handleCategoryDragEnd();
+
+    if (!changed) {
+      return;
+    }
+
+    startTransition(() => {
+      setData(nextData);
+    });
+
+    const finishSync = beginSync();
+
+    try {
+      const res = await fetch('/api/categories/reorder', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categoryIds }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Category reorder failed with status ${res.status}`);
+      }
+
+      await fetchData();
+    } catch (error) {
+      console.error('Failed to save category reorder:', error);
+      await fetchData();
+    } finally {
+      finishSync();
+    }
+  }
+
   // ===== Computed =====
   const totalMods = data
     ? data.categories.reduce((sum, cat) => sum + cat.mods.length, 0)
@@ -412,13 +498,16 @@ export default function Home() {
 
       {/* Category Grid */}
       <main className={styles.grid}>
-        {data.categories.map((cat) => (
+        {data.categories.map((cat, index) => (
           <CategoryCard
             key={cat.id}
             category={cat}
+            nextCategoryId={data.categories[index + 1]?.id ?? null}
             statuses={data.statuses}
             draggingModId={dragState?.modId ?? null}
+            draggingCategoryId={draggingCategoryId}
             activeDropTarget={activeDropTarget}
+            activeCategoryDropTarget={activeCategoryDropTarget}
             onAddMod={handleAddMod}
             onRemoveMod={handleRemoveMod}
             onChangeStatus={handleChangeStatus}
@@ -426,6 +515,10 @@ export default function Home() {
             onModDragEnd={handleModDragEnd}
             onModDragOver={handleModDragOver}
             onModDrop={handleModDrop}
+            onCategoryDragStart={handleCategoryDragStart}
+            onCategoryDragEnd={handleCategoryDragEnd}
+            onCategoryDragOver={handleCategoryDragOver}
+            onCategoryDrop={handleCategoryDrop}
           />
         ))}
       </main>

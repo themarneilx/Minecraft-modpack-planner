@@ -2,15 +2,18 @@
 
 import { createElement, type DragEvent } from 'react';
 import type { Category, Mod, StatusInfo } from '@/lib/data';
-import type { DropLocation } from '@/lib/reorder';
+import type { CategoryDropLocation, DropLocation } from '@/lib/reorder';
 import { getIcon } from '@/lib/icons';
 import styles from './CategoryCard.module.css';
 
 interface CategoryCardProps {
   category: Category;
+  nextCategoryId: number | null;
   statuses: StatusInfo[];
   draggingModId: number | null;
+  draggingCategoryId: number | null;
   activeDropTarget: DropLocation | null;
+  activeCategoryDropTarget: CategoryDropLocation | null;
   onAddMod: (categoryId: number) => void;
   onRemoveMod: (modId: number) => void;
   onChangeStatus: (modId: number) => void;
@@ -18,13 +21,20 @@ interface CategoryCardProps {
   onModDragEnd: () => void;
   onModDragOver: (categoryId: number, beforeModId: number | null) => void;
   onModDrop: (categoryId: number, beforeModId: number | null) => void;
+  onCategoryDragStart: (categoryId: number) => void;
+  onCategoryDragEnd: () => void;
+  onCategoryDragOver: (beforeCategoryId: number | null) => void;
+  onCategoryDrop: (beforeCategoryId: number | null) => void;
 }
 
 export default function CategoryCard({
   category,
+  nextCategoryId,
   statuses,
   draggingModId,
+  draggingCategoryId,
   activeDropTarget,
+  activeCategoryDropTarget,
   onAddMod,
   onRemoveMod,
   onChangeStatus,
@@ -32,9 +42,16 @@ export default function CategoryCard({
   onModDragEnd,
   onModDragOver,
   onModDrop,
+  onCategoryDragStart,
+  onCategoryDragEnd,
+  onCategoryDragOver,
+  onCategoryDrop,
 }: CategoryCardProps) {
   const statusMap = Object.fromEntries(statuses.map((s) => [s.key, s]));
-  const isDragging = draggingModId !== null;
+  const isCategoryDragging = draggingCategoryId !== null;
+  const categoryDropActive = activeCategoryDropTarget !== null &&
+    (activeCategoryDropTarget.beforeCategoryId === category.id ||
+      (activeCategoryDropTarget.beforeCategoryId === null && nextCategoryId === null));
 
   function isActiveDrop(beforeModId: number | null) {
     return activeDropTarget?.targetCategoryId === category.id && activeDropTarget.beforeModId === beforeModId;
@@ -69,9 +86,47 @@ export default function CategoryCard({
     onModDrop(category.id, beforeModId);
   }
 
+  function handleCategoryDragStart(event: DragEvent<HTMLDivElement>) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(category.id));
+    onCategoryDragStart(category.id);
+  }
+
+  function getBeforeCategoryId(event: DragEvent<HTMLElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientX < rect.left + rect.width / 2 ? category.id : nextCategoryId;
+  }
+
+  function handleCategoryDragOver(event: DragEvent<HTMLElement>) {
+    if (!isCategoryDragging) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'move';
+    onCategoryDragOver(getBeforeCategoryId(event));
+  }
+
+  function handleCategoryDrop(event: DragEvent<HTMLElement>) {
+    if (!isCategoryDragging) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onCategoryDrop(getBeforeCategoryId(event));
+  }
+
   return (
-    <div className={styles.card} data-category-id={category.id}>
-      <div className={styles.header} style={{ background: category.headerBg }}>
+    <div
+      className={`${styles.card} ${draggingCategoryId === category.id ? styles.categoryDragging : ''} ${categoryDropActive ? styles.categoryDropActive : ''}`}
+      data-category-id={category.id}
+      onDragOver={handleCategoryDragOver}
+      onDrop={handleCategoryDrop}
+    >
+      <div
+        className={styles.header}
+        style={{ background: category.headerBg }}
+        draggable
+        onDragStart={handleCategoryDragStart}
+        onDragEnd={onCategoryDragEnd}
+        title="Drag to reorder category"
+      >
         <h3 className={styles.title}>
           <span className={styles.icon}>{createElement(getIcon(category.icon), { size: 16 })}</span>
           {category.name}

@@ -6,6 +6,7 @@ export interface ReorderableMod {
 
 export interface ReorderableCategory<TMod extends ReorderableMod> {
   id: number;
+  sortOrder: number;
   mods: TMod[];
 }
 
@@ -19,6 +20,10 @@ export interface DropLocation {
   beforeModId: number | null;
 }
 
+export interface CategoryDropLocation {
+  beforeCategoryId: number | null;
+}
+
 export interface CategoryOrderPayload {
   categoryId: number;
   modIds: number[];
@@ -27,6 +32,11 @@ export interface CategoryOrderPayload {
 export interface ReorderResult<TCategory> {
   categories: TCategory[];
   affectedCategories: CategoryOrderPayload[];
+}
+
+export interface CategoryReorderResult<TCategory> {
+  categories: TCategory[];
+  categoryIds: number[];
 }
 
 export function moveModInCategories<
@@ -96,5 +106,45 @@ export function moveModInCategories<
         modIds: category?.mods.map((mod) => mod.id) ?? [],
       };
     }),
+  };
+}
+
+export function moveCategoryInList<TCategory extends { id: number; sortOrder: number }>(
+  categories: TCategory[],
+  categoryId: number,
+  beforeCategoryId: number | null,
+): CategoryReorderResult<TCategory> {
+  const draggedCategory = categories.find((category) => category.id === categoryId);
+
+  if (!draggedCategory) {
+    throw new Error(`Category ${categoryId} was not found`);
+  }
+
+  if (beforeCategoryId === categoryId) {
+    const categoriesWithSort = categories.map((category, sortOrder) => ({ ...category, sortOrder }));
+    return {
+      categories: categoriesWithSort,
+      categoryIds: categoriesWithSort.map((category) => category.id),
+    };
+  }
+
+  const categoriesWithoutDragged = categories.filter((category) => category.id !== categoryId);
+  const insertIndex = beforeCategoryId === null
+    ? categoriesWithoutDragged.length
+    : categoriesWithoutDragged.findIndex((category) => category.id === beforeCategoryId);
+
+  if (insertIndex < 0) {
+    throw new Error(`Drop target category ${beforeCategoryId} was not found`);
+  }
+
+  const nextCategories = [
+    ...categoriesWithoutDragged.slice(0, insertIndex),
+    draggedCategory,
+    ...categoriesWithoutDragged.slice(insertIndex),
+  ].map((category, sortOrder) => ({ ...category, sortOrder }));
+
+  return {
+    categories: nextCategories,
+    categoryIds: nextCategories.map((category) => category.id),
   };
 }

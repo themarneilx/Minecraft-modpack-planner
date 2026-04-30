@@ -10,6 +10,7 @@ import type { AppData, Mod } from '@/lib/data';
 import { MINECRAFT_VERSION_OPTIONS } from '@/lib/minecraft';
 import { upsertModInCategory } from '@/lib/mod-list';
 import {
+  isSameCategoryDropPosition,
   moveCategoryInList,
   moveModInCategories,
   type CategoryDropLocation,
@@ -344,7 +345,12 @@ export default function Home() {
   }
 
   function handleCategoryDragOver(beforeCategoryId: number | null) {
-    if (draggingCategoryId === null) return;
+    if (!data || draggingCategoryId === null) return;
+
+    if (isSameCategoryDropPosition(data.categories, draggingCategoryId, beforeCategoryId)) {
+      setActiveCategoryDropTarget(null);
+      return;
+    }
 
     setActiveCategoryDropTarget((current) => {
       if (current?.beforeCategoryId === beforeCategoryId) {
@@ -357,6 +363,11 @@ export default function Home() {
 
   async function handleCategoryDrop(beforeCategoryId: number | null) {
     if (!data || draggingCategoryId === null) {
+      handleCategoryDragEnd();
+      return;
+    }
+
+    if (isSameCategoryDropPosition(data.categories, draggingCategoryId, beforeCategoryId)) {
       handleCategoryDragEnd();
       return;
     }

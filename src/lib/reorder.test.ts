@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Category, Mod } from './data';
-import { moveCategoryInList, moveModInCategories } from './reorder';
+import { isSameCategoryDropPosition, moveCategoryInList, moveModInCategories } from './reorder';
 
 function mod(id: number, categoryId: number, sortOrder: number): Mod {
   return {
@@ -110,4 +110,18 @@ test('moves a category to the end of the list', () => {
     [1, 2],
   ]);
   assert.deepEqual(result.categoryIds, [2, 3, 1]);
+});
+
+test('detects when a category drop would keep the same order', () => {
+  const categories = [
+    category(1, []),
+    category(2, []),
+    category(3, []),
+  ];
+
+  assert.equal(isSameCategoryDropPosition(categories, 2, 2), true);
+  assert.equal(isSameCategoryDropPosition(categories, 2, 3), true);
+  assert.equal(isSameCategoryDropPosition(categories, 3, null), true);
+  assert.equal(isSameCategoryDropPosition(categories, 2, 1), false);
+  assert.equal(isSameCategoryDropPosition(categories, 1, null), false);
 });

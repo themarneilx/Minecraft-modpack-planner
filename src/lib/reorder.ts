@@ -148,3 +148,22 @@ export function moveCategoryInList<TCategory extends { id: number; sortOrder: nu
     categoryIds: nextCategories.map((category) => category.id),
   };
 }
+
+export function isSameCategoryDropPosition<TCategory extends { id: number }>(
+  categories: TCategory[],
+  categoryId: number,
+  beforeCategoryId: number | null,
+) {
+  const currentIndex = categories.findIndex((category) => category.id === categoryId);
+
+  if (currentIndex < 0) {
+    return true;
+  }
+
+  if (beforeCategoryId !== null && !categories.some((category) => category.id === beforeCategoryId)) {
+    return true;
+  }
+
+  const currentNextCategoryId = categories[currentIndex + 1]?.id ?? null;
+  return beforeCategoryId === categoryId || beforeCategoryId === currentNextCategoryId;
+}

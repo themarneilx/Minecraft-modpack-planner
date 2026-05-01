@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, startTransition } from 'react';
+import { useState, useEffect, useRef, startTransition, type DragEvent } from 'react';
 import Header from '@/components/Header/Header';
 import CategoryCard from '@/components/CategoryCard/CategoryCard';
 import SearchModal from '@/components/SearchModal/SearchModal';
 import StatusPicker from '@/components/StatusPicker/StatusPicker';
 import SettingsModal from '@/components/SettingsModal/SettingsModal';
+import { getCategoryDropTargetFromPoint, type CategoryDropTargetRect } from '@/lib/category-drop-target';
 import type { AppData, Mod } from '@/lib/data';
 import { MINECRAFT_VERSION_OPTIONS } from '@/lib/minecraft';
 import { upsertModInCategory } from '@/lib/mod-list';
@@ -48,6 +49,7 @@ export default function Home() {
   const [packName, setPackName] = useState('');
   const [mcVersion, setMcVersion] = useState('');
   const [loader, setLoader] = useState('');
+  const categoryGridRef = useRef<HTMLElement | null>(null);
   const isFetchingRef = useRef(false);
   const pendingRefreshRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -361,6 +363,51 @@ export default function Home() {
     });
   }
 
+  function getCategoryDropTargetFromEvent(event: DragEvent<HTMLElement>) {
+    if (draggingCategoryId === null) return null;
+
+    const grid = categoryGridRef.current;
+    if (!grid) return null;
+
+    const rects: CategoryDropTargetRect[] = Array.from(grid.querySelectorAll<HTMLElement>('[data-category-slot-id]'))
+      .map((element) => {
+        const id = Number(element.dataset.categorySlotId);
+        const rect = element.getBoundingClientRect();
+
+        return {
+          id,
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: rect.width,
+          height: rect.height,
+        };
+      })
+      .filter((rect) => Number.isInteger(rect.id) && rect.id > 0);
+
+    return getCategoryDropTargetFromPoint(
+      rects,
+      draggingCategoryId,
+      { x: event.clientX, y: event.clientY },
+    );
+  }
+
+  function handleCategoryGridDragOver(event: DragEvent<HTMLElement>) {
+    if (draggingCategoryId === null) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    handleCategoryDragOver(getCategoryDropTargetFromEvent(event));
+  }
+
+  function handleCategoryGridDrop(event: DragEvent<HTMLElement>) {
+    if (draggingCategoryId === null) return;
+
+    event.preventDefault();
+    void handleCategoryDrop(getCategoryDropTargetFromEvent(event));
+  }
+
   async function handleCategoryDrop(beforeCategoryId: number | null) {
     if (!data || draggingCategoryId === null) {
       handleCategoryDragEnd();
@@ -508,7 +555,12 @@ export default function Home() {
       </div>
 
       {/* Category Grid */}
-      <main className={styles.grid}>
+      <main
+        ref={categoryGridRef}
+        className={styles.grid}
+        onDragOver={handleCategoryGridDragOver}
+        onDrop={handleCategoryGridDrop}
+      >
         {data.categories.map((cat, index) => (
           <CategoryCard
             key={cat.id}
@@ -528,8 +580,6 @@ export default function Home() {
             onModDrop={handleModDrop}
             onCategoryDragStart={handleCategoryDragStart}
             onCategoryDragEnd={handleCategoryDragEnd}
-            onCategoryDragOver={handleCategoryDragOver}
-            onCategoryDrop={handleCategoryDrop}
           />
         ))}
       </main>

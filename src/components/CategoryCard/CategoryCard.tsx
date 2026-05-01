@@ -1,10 +1,14 @@
 'use client';
 
-import { createElement, type DragEvent } from 'react';
+import { createElement, useLayoutEffect, useRef, useState, type DragEvent } from 'react';
 import type { Category, Mod, StatusInfo } from '@/lib/data';
+import { getCategoryModDisplay } from '@/lib/category-display';
 import type { CategoryDropLocation, DropLocation } from '@/lib/reorder';
 import { getIcon } from '@/lib/icons';
 import styles from './CategoryCard.module.css';
+
+const MASONRY_ROW_HEIGHT = 8;
+const MASONRY_GAP = 16;
 
 interface CategoryCardProps {
   category: Category;
@@ -23,8 +27,6 @@ interface CategoryCardProps {
   onModDrop: (categoryId: number, beforeModId: number | null) => void;
   onCategoryDragStart: (categoryId: number) => void;
   onCategoryDragEnd: () => void;
-  onCategoryDragOver: (beforeCategoryId: number | null) => void;
-  onCategoryDrop: (beforeCategoryId: number | null) => void;
 }
 
 export default function CategoryCard({
@@ -44,10 +46,12 @@ export default function CategoryCard({
   onModDrop,
   onCategoryDragStart,
   onCategoryDragEnd,
-  onCategoryDragOver,
-  onCategoryDrop,
 }: CategoryCardProps) {
+  const [showAllMods, setShowAllMods] = useState(false);
+  const slotRef = useRef<HTMLDivElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
   const statusMap = Object.fromEntries(statuses.map((s) => [s.key, s]));
+  const modDisplay = getCategoryModDisplay(category.mods, showAllMods);
   const isCategoryDragging = draggingCategoryId !== null;
   const categoryDropBeforeActive = activeCategoryDropTarget?.beforeCategoryId === category.id;
   const categoryDropAfterActive = activeCategoryDropTarget?.beforeCategoryId === null && nextCategoryId === null;
@@ -56,6 +60,32 @@ export default function CategoryCard({
   function isActiveDrop(beforeModId: number | null) {
     return activeDropTarget?.targetCategoryId === category.id && activeDropTarget.beforeModId === beforeModId;
   }
+
+  useLayoutEffect(() => {
+    const slot = slotRef.current;
+    const card = cardRef.current;
+    if (!slot || !card) return;
+
+    const observedSlot = slot;
+    const observedCard = card;
+
+    function updateSpan() {
+      const height = observedCard.offsetHeight;
+      const span = Math.max(1, Math.ceil((height + MASONRY_GAP) / (MASONRY_ROW_HEIGHT + MASONRY_GAP)));
+      observedSlot.style.setProperty('--category-row-span', String(span));
+    }
+
+    updateSpan();
+
+    const observer = new ResizeObserver(updateSpan);
+    observer.observe(observedCard);
+    window.addEventListener('resize', updateSpan);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateSpan);
+    };
+  }, [category.id, modDisplay.visibleMods.length, showAllMods]);
 
   function handleDragStart(event: DragEvent<HTMLDivElement>, modId: number) {
     event.dataTransfer.effectAllowed = 'move';
@@ -69,10 +99,10 @@ export default function CategoryCard({
     onModDragOver(category.id, beforeModId);
   }
 
-  function handleRowDragOver(event: DragEvent<HTMLDivElement>, mod: Mod, index: number) {
+  function handleRowDragOver(event: DragEvent<HTMLDivElement>, mod: Mod, nextVisibleModId: number | null) {
     const rect = event.currentTarget.getBoundingClientRect();
     const isUpperHalf = event.clientY < rect.top + rect.height / 2;
-    const beforeModId = isUpperHalf ? mod.id : category.mods[index + 1]?.id ?? null;
+    const beforeModId = isUpperHalf ? mod.id : nextVisibleModId;
 
     if (beforeModId === draggingModId) {
       return;
@@ -103,38 +133,21 @@ export default function CategoryCard({
     onCategoryDragStart(category.id);
   }
 
-  function getBeforeCategoryId(event: DragEvent<HTMLElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    return event.clientX < rect.left + rect.width / 2 ? category.id : nextCategoryId;
-  }
-
-  function handleCategoryDragOver(event: DragEvent<HTMLElement>) {
-    if (!isCategoryDragging) return;
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = 'move';
-    onCategoryDragOver(getBeforeCategoryId(event));
-  }
-
-  function handleCategoryDrop(event: DragEvent<HTMLElement>) {
-    if (!isCategoryDragging) return;
-    event.preventDefault();
-    event.stopPropagation();
-    onCategoryDrop(getBeforeCategoryId(event));
-  }
-
   return (
-    <div className={styles.cardSlot} data-category-slot-id={category.id}>
+    <div
+      ref={slotRef}
+      className={styles.cardSlot}
+      data-category-slot-id={category.id}
+    >
       <div
         className={`${styles.categoryDropIndicator} ${styles.categoryDropIndicatorBefore} ${categoryDropBeforeActive ? styles.categoryDropIndicatorActive : ''}`}
         aria-hidden="true"
       />
       <div
+        ref={cardRef}
         className={`${styles.card} ${draggingCategoryId === category.id ? styles.categoryDragging : ''} ${categoryDropActive ? styles.categoryDropActive : ''}`}
         data-category-id={category.id}
         data-category-card="true"
-        onDragOver={handleCategoryDragOver}
-        onDrop={handleCategoryDrop}
       >
         <div
           className={styles.header}
@@ -169,10 +182,14 @@ export default function CategoryCard({
             </div>
           ) : (
             <div className={styles.modList}>
-              {category.mods.map((mod, index) => {
+              {modDisplay.visibleMods.map((mod, index) => {
                 const status = statusMap[mod.statusKey] || { label: 'Unknown', color: '#ccc' };
                 return (
-                  <div key={mod.id}>
+                  <div
+                    key={mod.id}
+                    className={styles.modRow}
+                    data-mod-row-id={mod.id}
+                  >
                     <div
                       className={`${styles.dropIndicator} ${isActiveDrop(mod.id) ? styles.dropIndicatorActive : ''}`}
                       data-drop-category-id={category.id}
@@ -188,7 +205,7 @@ export default function CategoryCard({
                       draggable
                       onDragStart={(event) => handleDragStart(event, mod.id)}
                       onDragEnd={onModDragEnd}
-                      onDragOver={(event) => handleRowDragOver(event, mod, index)}
+                      onDragOver={(event) => handleRowDragOver(event, mod, modDisplay.visibleMods[index + 1]?.id ?? null)}
                       onDrop={(event) => {
                         const beforeModId = isActiveDrop(null)
                           ? null
@@ -245,6 +262,17 @@ export default function CategoryCard({
             </div>
           )}
         </div>
+
+        {modDisplay.canExpand && (
+          <button
+            className={styles.showMoreBtn}
+            type="button"
+            data-show-more-mods={category.id}
+            onClick={() => setShowAllMods((current) => !current)}
+          >
+            {showAllMods ? 'Show less' : `Show ${modDisplay.hiddenCount} more`}
+          </button>
+        )}
 
         <button className={styles.addBtn} onClick={() => onAddMod(category.id)}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

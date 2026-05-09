@@ -81,7 +81,7 @@ export default function Home() {
       const res = await fetch('/api/data');
       const json: AppData = await res.json();
       setData(json);
-      setLastUpdatedAt(new Date().toISOString());
+      setLastUpdatedAt(json.packInfo?.updatedAt ?? null);
       if (json.packInfo) {
         setPackName(json.packInfo.name);
         setMcVersion(json.packInfo.mcVersion);

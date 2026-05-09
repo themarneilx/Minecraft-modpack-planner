@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { broadcastAppDataUpdated } from '@/server/realtime';
+import { notifyAppDataUpdated } from '@/server/app-updates';
 
 // GET pack info
 export async function GET() {
@@ -39,7 +39,7 @@ export async function PUT(request: Request) {
       });
     }
 
-    broadcastAppDataUpdated();
+    await notifyAppDataUpdated();
     return NextResponse.json(pack);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

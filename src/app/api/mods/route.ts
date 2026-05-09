@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { broadcastAppDataUpdated } from '@/server/realtime';
+import { notifyAppDataUpdated } from '@/server/app-updates';
 
 // POST create a new mod
 export async function POST(request: Request) {
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       },
     });
 
-    broadcastAppDataUpdated();
+    await notifyAppDataUpdated();
     return NextResponse.json(mod, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

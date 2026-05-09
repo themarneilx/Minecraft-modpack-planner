@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { broadcastAppDataUpdated } from '@/server/realtime';
+import { notifyAppDataUpdated } from '@/server/app-updates';
 
 function isIntegerId(value: unknown): value is number {
   return Number.isInteger(value) && Number(value) > 0;
@@ -48,7 +48,7 @@ export async function PATCH(request: Request) {
       ),
     );
 
-    broadcastAppDataUpdated();
+    await notifyAppDataUpdated();
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

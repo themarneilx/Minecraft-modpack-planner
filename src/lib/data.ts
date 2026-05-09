@@ -33,6 +33,7 @@ export interface PackInfo {
   name: string;
   mcVersion: string;
   loader: string;
+  updatedAt: string;
 }
 
 export interface AppData {

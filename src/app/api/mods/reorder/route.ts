@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { broadcastAppDataUpdated } from '@/server/realtime';
+import { notifyAppDataUpdated } from '@/server/app-updates';
 
 interface CategoryOrderRequest {
   categoryId: number;
@@ -90,7 +90,7 @@ export async function PATCH(request: Request) {
       await prisma.$transaction(updates);
     }
 
-    broadcastAppDataUpdated();
+    await notifyAppDataUpdated();
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

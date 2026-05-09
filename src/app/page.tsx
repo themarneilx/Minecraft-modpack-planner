@@ -26,6 +26,7 @@ export default function Home() {
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
   // Search modal
   const [searchOpen, setSearchOpen] = useState(false);
@@ -80,6 +81,7 @@ export default function Home() {
       const res = await fetch('/api/data');
       const json: AppData = await res.json();
       setData(json);
+      setLastUpdatedAt(new Date().toISOString());
       if (json.packInfo) {
         setPackName(json.packInfo.name);
         setMcVersion(json.packInfo.mcVersion);
@@ -486,7 +488,7 @@ export default function Home() {
 
   return (
     <>
-      <Header statuses={data.statuses} isSyncing={isSyncing} />
+      <Header statuses={data.statuses} isSyncing={isSyncing} lastUpdatedAt={lastUpdatedAt} />
 
       {/* Pack Info */}
       <div className={styles.packInfo}>

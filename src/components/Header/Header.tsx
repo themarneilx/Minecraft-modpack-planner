@@ -4,14 +4,17 @@ import { useState } from 'react';
 import styles from './Header.module.css';
 import Legend from '../Legend/Legend';
 import type { StatusInfo } from '@/lib/data';
+import { formatLastUpdatedAt } from '@/lib/live-status';
 
 interface HeaderProps {
   statuses: StatusInfo[];
   isSyncing: boolean;
+  lastUpdatedAt: string | null;
 }
 
-export default function Header({ statuses, isSyncing }: HeaderProps) {
+export default function Header({ statuses, isSyncing, lastUpdatedAt }: HeaderProps) {
   const [legendOpen, setLegendOpen] = useState(false);
+  const lastUpdatedLabel = formatLastUpdatedAt(lastUpdatedAt);
 
   return (
     <>
@@ -46,7 +49,10 @@ export default function Header({ statuses, isSyncing }: HeaderProps) {
           <div className={`${styles.online} ${isSyncing ? styles.onlineSyncing : ''}`}>
             <span className={isSyncing ? styles.syncSpinner : styles.pulseDot} />
             <span className={styles.onlineText}>
-              {isSyncing ? 'Syncing...' : 'Live — All changes auto-saved'}
+              <span>{isSyncing ? 'Syncing...' : 'Live · All changes auto-saved'}</span>
+              {lastUpdatedAt && (
+                <span className={styles.lastUpdated}>Last update: {lastUpdatedLabel}</span>
+              )}
             </span>
           </div>
           <button

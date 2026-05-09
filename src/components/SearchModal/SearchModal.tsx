@@ -3,18 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import type { StatusInfo } from '@/lib/data';
 import { MINECRAFT_VERSION_OPTIONS } from '@/lib/minecraft';
-import { buildModrinthSearchUrl, shouldAutoSearch } from '@/lib/search';
+import { buildSearchUrl, shouldAutoSearch, type SearchResult, type SearchSource } from '@/lib/search';
 import styles from './SearchModal.module.css';
-
-interface SearchResult {
-  name: string;
-  description: string;
-  icon: string;
-  downloads: number;
-  url: string;
-  source: string;
-  author: string;
-}
 
 interface SearchModalProps {
   open: boolean;
@@ -32,7 +22,7 @@ function formatNumber(n: number): string {
 }
 
 export default function SearchModal({ open, categoryId, statuses, onClose, onAddMod }: SearchModalProps) {
-  const [source, setSource] = useState<'modrinth' | 'curseforge' | 'manual'>('modrinth');
+  const [source, setSource] = useState<SearchSource>('modrinth');
   const [query, setQuery] = useState('');
   const [version, setVersion] = useState('');
   const [loader, setLoader] = useState('');
@@ -77,7 +67,7 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
     setManualAdded(false);
   }
 
-  function handleSourceChange(nextSource: 'modrinth' | 'curseforge' | 'manual') {
+  function handleSourceChange(nextSource: SearchSource) {
     setSource(nextSource);
     resetEntryState();
   }
@@ -93,7 +83,7 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
     }
   }
 
-  async function runSearch(searchQuery: string, searchSource: 'modrinth' | 'curseforge' | 'manual', searchVersion: string, searchLoader: string) {
+  async function runSearch(searchQuery: string, searchSource: SearchSource, searchVersion: string, searchLoader: string) {
     const trimmedQuery = searchQuery.trim();
 
     if (!trimmedQuery || searchSource === 'manual') return;
@@ -101,19 +91,12 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
     const requestId = searchRequestRef.current + 1;
     searchRequestRef.current = requestId;
 
-    if (searchSource === 'curseforge') {
-      setLoading(false);
-      setResults([]);
-      setError('curseforge');
-      return;
-    }
-
     setLoading(true);
     setError('');
     setResults([]);
 
     try {
-      const res = await fetch(buildModrinthSearchUrl(trimmedQuery, searchVersion, searchLoader));
+      const res = await fetch(buildSearchUrl(searchSource, trimmedQuery, searchVersion, searchLoader));
       const data = await res.json();
 
       if (requestId !== searchRequestRef.current) return;
@@ -282,21 +265,7 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
                 </div>
               )}
 
-              {error === 'curseforge' && (
-                <div className={styles.placeholder}>
-                  <span style={{ fontSize: '32px' }}>🔑</span>
-                  <p><strong>CurseForge API Key Required</strong></p>
-                  <p style={{ textAlign: 'center', maxWidth: '360px' }}>
-                    CurseForge requires an API key. Get one at{' '}
-                    <a href="https://console.curseforge.com" target="_blank" rel="noopener noreferrer">
-                      console.curseforge.com
-                    </a>
-                  </p>
-                  <p className={styles.hint}>Switch to Modrinth for instant free search!</p>
-                </div>
-              )}
-
-              {error && error !== 'curseforge' && (
+              {error && (
                 <div className={styles.placeholder}><p>Error: {error}</p></div>
               )}
 

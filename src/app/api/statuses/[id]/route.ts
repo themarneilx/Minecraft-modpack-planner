@@ -41,7 +41,15 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Status not found' }, { status: 404 });
     }
 
-    const modCount = await prisma.mod.count({ where: { statusKey: status.key } });
+    const [primaryMods, indicatorMods] = await Promise.all([
+      prisma.mod.findMany({ where: { statusKey: status.key }, select: { id: true } }),
+      prisma.modStatus.findMany({ where: { statusKey: status.key }, select: { modId: true } }),
+    ]);
+    const modCount = new Set([
+      ...primaryMods.map((mod) => mod.id),
+      ...indicatorMods.map((indicator) => indicator.modId),
+    ]).size;
+
     if (modCount > 0) {
       return NextResponse.json(
         { error: `Cannot delete: ${modCount} mod(s) use this status` },

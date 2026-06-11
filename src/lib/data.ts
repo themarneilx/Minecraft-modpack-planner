@@ -13,6 +13,7 @@ export interface Mod {
   id: number;
   name: string;
   statusKey: string;
+  statusKeys: string[];
   source: string;
   url: string;
   sortOrder: number;

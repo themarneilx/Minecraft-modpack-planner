@@ -1,15 +1,21 @@
 'use client';
 
 import { useState, useEffect, useRef, startTransition, type DragEvent } from 'react';
+import Image from 'next/image';
 import Header from '@/components/Header/Header';
 import CategoryCard from '@/components/CategoryCard/CategoryCard';
 import SearchModal from '@/components/SearchModal/SearchModal';
 import StatusPicker from '@/components/StatusPicker/StatusPicker';
 import SettingsModal from '@/components/SettingsModal/SettingsModal';
+import { parseAppDataPayload } from '@/lib/app-data';
+import { TREE_LOGO_ALT, TREE_LOGO_SRC } from '@/lib/brand-assets';
 import { getCategoryDropTargetFromPoint, type CategoryDropTargetRect } from '@/lib/category-drop-target';
 import type { AppData, Mod } from '@/lib/data';
+import { getRemainingInitialLoadingMs } from '@/lib/loading-screen';
 import { MINECRAFT_VERSION_OPTIONS } from '@/lib/minecraft';
+import { getSearchModalSessionKey, getStatusModalSessionKey } from '@/lib/modal-session-keys';
 import { upsertModInCategory } from '@/lib/mod-list';
+import { buildModStatusUpdate, normalizeModStatusKeys } from '@/lib/mod-statuses';
 import {
   isSameCategoryDropPosition,
   moveCategoryInList,
@@ -25,6 +31,7 @@ const LOADER_OPTIONS = ['Fabric', 'Forge', 'NeoForge', 'Quilt'] as const;
 export default function Home() {
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
@@ -36,6 +43,7 @@ export default function Home() {
   // Status picker
   const [statusOpen, setStatusOpen] = useState(false);
   const [editModId, setEditModId] = useState(0);
+  const [statusSession, setStatusSession] = useState(0);
 
   // Settings modal
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -55,6 +63,8 @@ export default function Home() {
   const pendingRefreshRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSyncCountRef = useRef(0);
+  const initialLoadStartedAtRef = useRef<number | null>(null);
+  const initialLoadSettledRef = useRef(false);
 
   function beginSync() {
     activeSyncCountRef.current += 1;
@@ -79,17 +89,38 @@ export default function Home() {
 
     try {
       const res = await fetch('/api/data');
-      const json: AppData = await res.json();
-      setData(json);
-      setLastUpdatedAt(json.packInfo?.updatedAt ?? null);
-      if (json.packInfo) {
-        setPackName(json.packInfo.name);
-        setMcVersion(json.packInfo.mcVersion);
-        setLoader(json.packInfo.loader);
+      const json: unknown = await res.json();
+      const appData = parseAppDataPayload(json);
+
+      if (!res.ok || !appData) {
+        const errorMessage = json && typeof json === 'object' && 'error' in json
+          ? String((json as { error: unknown }).error)
+          : `Failed to load data with status ${res.status}`;
+        throw new Error(errorMessage);
+      }
+
+      setData(appData);
+      setLoadError('');
+      setLastUpdatedAt(appData.packInfo?.updatedAt ?? null);
+      if (appData.packInfo) {
+        setPackName(appData.packInfo.name);
+        setMcVersion(appData.packInfo.mcVersion);
+        setLoader(appData.packInfo.loader);
       }
     } catch (err) {
       console.error('Failed to load data:', err);
+      setLoadError(err instanceof Error ? err.message : 'Failed to load modpack data');
+      setData(null);
     } finally {
+      if (!initialLoadSettledRef.current) {
+        const startedAtMs = initialLoadStartedAtRef.current ?? Date.now();
+        const remainingInitialLoadingMs = getRemainingInitialLoadingMs(startedAtMs, Date.now());
+        if (remainingInitialLoadingMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, remainingInitialLoadingMs));
+        }
+        initialLoadSettledRef.current = true;
+      }
+
       isFetchingRef.current = false;
       setLoading(false);
       finishSync();
@@ -102,6 +133,7 @@ export default function Home() {
   }
 
   useEffect(() => {
+    initialLoadStartedAtRef.current = Date.now();
     void fetchData();
     // The initial load uses refs and stable state setters; it should only run once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -232,17 +264,38 @@ export default function Home() {
 
   function handleChangeStatus(modId: number) {
     setEditModId(modId);
+    setStatusSession((current) => current + 1);
     setStatusOpen(true);
   }
 
-  async function handleStatusSelect(statusKey: string) {
+  function getModById(modId: number) {
+    if (!data) return null;
+
+    for (const category of data.categories) {
+      const mod = category.mods.find((item) => item.id === modId);
+      if (mod) return mod;
+    }
+
+    return null;
+  }
+
+  async function handleStatusSave(statusKeys: string[]) {
+    if (!data) return;
+
+    const editingMod = getModById(editModId);
+    const update = buildModStatusUpdate({
+      selectedKeys: statusKeys,
+      primaryKey: statusKeys[0] ?? editingMod?.statusKey ?? data.statuses[0]?.key ?? 'added',
+      availableKeys: data.statuses.map((status) => status.key),
+      fallbackStatusKey: editingMod?.statusKey ?? data.statuses[0]?.key ?? 'added',
+    });
     const finishSync = beginSync();
 
     try {
       const res = await fetch(`/api/mods/${editModId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statusKey }),
+        body: JSON.stringify(update),
       });
 
       if (res.ok) {
@@ -474,12 +527,41 @@ export default function Home() {
   const totalMods = data
     ? data.categories.reduce((sum, cat) => sum + cat.mods.length, 0)
     : 0;
+  const editingMod = data ? getModById(editModId) : null;
 
   if (loading) {
     return (
       <div className={styles.loadingScreen}>
-        <div className={styles.spinner} />
-        <p>Loading modpack...</p>
+        <div className={styles.loadingShell}>
+          <div className={styles.loadingLogoFrame}>
+            <Image
+              className={styles.loadingLogo}
+              src={TREE_LOGO_SRC}
+              alt={TREE_LOGO_ALT}
+              width={180}
+              height={180}
+              priority
+              sizes="180px"
+            />
+          </div>
+          <div className={styles.loadingTextBlock}>
+            <p className={styles.loadingKicker}>Loading Modpack Planner</p>
+            <h1 className={styles.loadingTitle}>Tree Emporium</h1>
+          </div>
+          <div className={styles.loadingBar} aria-label="Loading modpack">
+            <span className={styles.loadingBarFill} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className={styles.loadingScreen}>
+        <p className={styles.errorTitle}>Failed to load modpack</p>
+        <p className={styles.errorMessage}>{loadError}</p>
+        <button className={styles.retryBtn} onClick={() => void fetchData()}>Retry</button>
       </div>
     );
   }
@@ -538,8 +620,8 @@ export default function Home() {
         <div className={styles.packActions}>
           <button className={styles.settingsBtn} onClick={() => setSettingsOpen(true)}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              <path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.2a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.6a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.2a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.2a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.6a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.2a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z" />
+              <circle cx="12" cy="12" r="3.2" />
             </svg>
             Settings
           </button>
@@ -588,7 +670,7 @@ export default function Home() {
 
       {/* Modals */}
       <SearchModal
-        key={searchSession}
+        key={getSearchModalSessionKey(searchSession)}
         open={searchOpen}
         categoryId={searchCategoryId}
         statuses={data.statuses}
@@ -596,10 +678,13 @@ export default function Home() {
         onAddMod={handleModAdded}
       />
       <StatusPicker
+        key={getStatusModalSessionKey(statusSession)}
         open={statusOpen}
         statuses={data.statuses}
         onClose={() => setStatusOpen(false)}
-        onSelect={handleStatusSelect}
+        selectedKeys={editingMod ? normalizeModStatusKeys(editingMod) : []}
+        primaryKey={editingMod?.statusKey ?? data.statuses[0]?.key ?? 'added'}
+        onSave={handleStatusSave}
       />
       <SettingsModal
         open={settingsOpen}

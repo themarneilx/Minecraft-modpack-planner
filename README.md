@@ -17,7 +17,7 @@ It is designed for one shared modpack that everyone sees at the same time: add m
 - **Single shared modpack board** with no accounts or rooms
 - **Custom categories** with editable names, icons, and header colors
 - **Custom statuses** with editable keys, labels, background colors, and text colors
-- **One primary status per mod** for quick board scanning
+- **One primary status plus multiple additional status indicators per mod** for quick board scanning
 - **Drag-and-drop mod reordering** within a category or into another category column
 - **Drag-and-drop category reordering** from the card title bar, including each card's mod contents
 - **Stable placement indicators** for category and mod moves, including grid-gap category drop targets
@@ -50,6 +50,7 @@ It is designed for one shared modpack that everyone sees at the same time: add m
 - **Masonry-style category board** with compact cards that do not stretch to match neighboring cards
 - **Responsive layout** for desktop and mobile
 - **Settings modal** for managing statuses and categories
+- **Legend visible by default** with an eye-open / eye-closed toggle
 - **Live color preview** while editing legend and category styles
 
 ---
@@ -114,6 +115,8 @@ To get a CurseForge API key:
 npx prisma db push
 npx prisma generate
 ```
+
+Run these again after pulling schema updates. The multi-status feature adds the `mod_statuses` table while keeping each mod's existing primary `status_key`.
 
 ### 4. Seed starter data
 
@@ -197,6 +200,7 @@ modpack-maker/
 │   │   ├── icons.ts                # Category icon registry
 │   │   ├── minecraft.ts           # Shared Minecraft version options
 │   │   ├── mod-list.ts            # Client-side mod insertion helper
+│   │   ├── mod-statuses.ts        # Primary status and multi-indicator helpers
 │   │   ├── prisma.ts
 │   │   ├── reorder.ts             # Drag-and-drop reorder helper
 │   │   └── search.ts              # Search URL and auto-search helpers
@@ -233,6 +237,19 @@ modpack-maker/
 | GET | `/api/search/modrinth` | Search Modrinth |
 
 All mutating routes broadcast a realtime invalidation event after successful writes.
+
+### Mod Status Payload
+
+Mods keep `statusKey` as the primary status and expose `statusKeys` as the ordered indicator list:
+
+```json
+{
+  "statusKey": "curseforge",
+  "statusKeys": ["curseforge", "fabric", "pending-addition"]
+}
+```
+
+`statusKeys[0]` is treated as the primary status. Older mods that only have `statusKey` are normalized to a single indicator automatically.
 
 ### Mod Reorder Payload
 
@@ -282,7 +299,7 @@ The route updates each listed category's `sortOrder` in one transaction, then br
 Useful local checks:
 
 ```bash
-node --import tsx --test src/lib/category-display.test.ts src/lib/category-drop-target.test.ts src/lib/mod-list.test.ts src/lib/reorder.test.ts src/lib/search.test.ts src/server/curseforge-env.test.ts
+node --import tsx --test src/lib/app-data.test.ts src/lib/brand-assets.test.ts src/lib/category-colors.test.ts src/lib/category-display.test.ts src/lib/category-drop-target.test.ts src/lib/loading-screen.test.ts src/lib/modal-session-keys.test.ts src/lib/mod-list.test.ts src/lib/mod-statuses.test.ts src/lib/reorder.test.ts src/lib/search.test.ts src/lib/live-status.test.ts src/server/curseforge-env.test.ts
 npx tsc --noEmit
 npm run lint
 npm run build
@@ -308,7 +325,7 @@ There is currently no `npm test` script in `package.json`; the focused helper te
 - [x] Auto-search while typing
 - [x] Collapsed category previews for long mod lists
 - [x] Responsive layout
-- [ ] Multiple indicators or multi-status support per mod
+- [x] Multiple indicators or multi-status support per mod
 - [ ] Export modpack as `.txt` or `.json`
 - [ ] Multi-pack rooms instead of one global board
 

@@ -10,6 +10,7 @@ function mod(id: number, categoryId: number, sortOrder: number): Mod {
     sortOrder,
     name: `Mod ${id}`,
     statusKey: 'added',
+    statusKeys: ['added'],
     source: 'manual',
     url: '',
   };

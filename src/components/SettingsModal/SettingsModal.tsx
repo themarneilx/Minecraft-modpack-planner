@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { CATEGORY_HEADER_COLORS, DEFAULT_CATEGORY_HEADER_COLOR, normalizeCategoryHeaderColor } from '@/lib/category-colors';
 import type { StatusInfo, Category } from '@/lib/data';
 import { getIcon } from '@/lib/icons';
 import IconPicker from '../IconPicker/IconPicker';
@@ -31,7 +32,7 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
   // Category form state
   const [catName, setCatName] = useState('');
   const [catIcon, setCatIcon] = useState('package');
-  const [catColor, setCatColor] = useState('#e8f5e9');
+  const [catColor, setCatColor] = useState(DEFAULT_CATEGORY_HEADER_COLOR);
   const [editingCat, setEditingCat] = useState<{ id: number; name: string; icon: string; headerBg: string } | null>(null);
   const [creatingCat, setCreatingCat] = useState(false);
 
@@ -123,7 +124,7 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
     setCreatingCat(false);
     setCatName(c.name);
     setCatIcon(c.icon);
-    setCatColor(c.headerBg);
+    setCatColor(normalizeCategoryHeaderColor(c.headerBg));
     setError('');
   }
 
@@ -132,7 +133,7 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
     setCreatingCat(true);
     setCatName('');
     setCatIcon('package');
-    setCatColor('#e8f5e9');
+    setCatColor(DEFAULT_CATEGORY_HEADER_COLOR);
     setError('');
   }
 
@@ -147,18 +148,19 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
     setError('');
 
     try {
+      const headerBg = normalizeCategoryHeaderColor(catColor);
       if (editingCat) {
         const res = await fetch(`/api/categories/${editingCat.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: catName, icon: catIcon, headerBg: catColor }),
+          body: JSON.stringify({ name: catName, icon: catIcon, headerBg }),
         });
         if (!res.ok) throw new Error('Failed to update');
       } else {
         const res = await fetch('/api/categories', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: catName, icon: catIcon, headerBg: catColor }),
+          body: JSON.stringify({ name: catName, icon: catIcon, headerBg }),
         });
         if (!res.ok) throw new Error('Failed to create');
       }
@@ -299,10 +301,23 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
                   <div className={styles.formRow}>
                     <div className={styles.formGroup}>
                       <label>Header Color</label>
-                      <div className={styles.colorInput}>
-                        <input type="color" value={catColor} onChange={(e) => setCatColor(e.target.value)} />
-                        <input type="text" value={catColor} onChange={(e) => setCatColor(e.target.value)} />
+                      <div className={styles.colorPalette} role="group" aria-label="Header color palette">
+                        {CATEGORY_HEADER_COLORS.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            className={`${styles.colorSwatchButton} ${catColor === color ? styles.colorSwatchSelected : ''}`}
+                            style={{ background: color }}
+                            onClick={() => setCatColor(color)}
+                            aria-label={`Use ${color} as the category header color`}
+                            aria-pressed={catColor === color}
+                            title={color}
+                          >
+                            {catColor === color && <span className={styles.colorSwatchCheck} aria-hidden="true" />}
+                          </button>
+                        ))}
                       </div>
+                      <div className={styles.selectedColorValue}>Selected {catColor}</div>
                     </div>
                   </div>
                   <div className={styles.preview}>

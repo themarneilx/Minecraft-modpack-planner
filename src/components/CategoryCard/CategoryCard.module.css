@@ -199,17 +199,37 @@
 
 .endDropIndicator { margin-bottom: 2px; }
 
+.statusDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 14px;
+  max-width: 38px;
+  padding: 2px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s, background 0.15s;
+}
+
+.statusDots:hover {
+  background: rgba(255, 255, 255, 0.65);
+  transform: scale(1.08);
+}
+
 .statusDot {
   width: 10px;
   height: 10px;
   border-radius: 3px;
   flex-shrink: 0;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  cursor: pointer;
-  transition: transform 0.15s;
 }
 
-.statusDot:hover { transform: scale(1.3); }
+.statusDotPrimary {
+  box-shadow: 0 0 0 1.5px rgba(47, 111, 68, 0.22);
+}
 
 .modName {
   font-size: 13px;

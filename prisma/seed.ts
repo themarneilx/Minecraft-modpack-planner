@@ -69,6 +69,7 @@ async function main() {
   console.log('Seeding database...');
 
   // Clear existing data
+  await prisma.modStatus.deleteMany();
   await prisma.mod.deleteMany();
   await prisma.category.deleteMany();
   await prisma.status.deleteMany();
@@ -96,7 +97,7 @@ async function main() {
     const category = createdCategories[parseInt(catIndex)];
     if (!category) continue;
     for (let i = 0; i < mods.length; i++) {
-      await prisma.mod.create({
+      const mod = await prisma.mod.create({
         data: {
           name: mods[i].name,
           statusKey: mods[i].statusKey,
@@ -104,6 +105,13 @@ async function main() {
           url: mods[i].url,
           categoryId: category.id,
           sortOrder: i,
+        },
+      });
+      await prisma.modStatus.create({
+        data: {
+          modId: mod.id,
+          statusKey: mods[i].statusKey,
+          sortOrder: 0,
         },
       });
     }

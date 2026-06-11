@@ -1,9 +1,11 @@
 'use client';
 
+import Image from 'next/image';
 import { useState } from 'react';
 import styles from './Header.module.css';
 import Legend from '../Legend/Legend';
 import type { StatusInfo } from '@/lib/data';
+import { TREE_LOGO_SRC } from '@/lib/brand-assets';
 import { formatLastUpdatedAt } from '@/lib/live-status';
 
 interface HeaderProps {
@@ -13,7 +15,7 @@ interface HeaderProps {
 }
 
 export default function Header({ statuses, isSyncing, lastUpdatedAt }: HeaderProps) {
-  const [legendOpen, setLegendOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(true);
   const lastUpdatedLabel = formatLastUpdatedAt(lastUpdatedAt);
 
   return (
@@ -22,24 +24,14 @@ export default function Header({ statuses, isSyncing, lastUpdatedAt }: HeaderPro
         <div className={styles.left}>
           <div className={styles.logo}>
             <span className={styles.logoIcon} aria-hidden="true">
-              <svg viewBox="0 0 48 48" role="img" focusable="false">
-                <path
-                  className={styles.treeCanopyBack}
-                  d="M24 5c-6.5 0-11.7 4.9-12.3 11.2A10.9 10.9 0 0 0 5 26.4C5 32.8 10.2 38 16.6 38h14.8C37.8 38 43 32.8 43 26.4c0-4.8-2.9-8.9-7.1-10.7C34.9 9.7 29.9 5 24 5Z"
-                />
-                <path
-                  className={styles.treeCanopyFront}
-                  d="M17 22.5c0-4.7 3.8-8.5 8.5-8.5 3.5 0 6.6 2.2 7.8 5.3 2.7.7 4.7 3.1 4.7 6 0 3.4-2.8 6.2-6.2 6.2H16.4A6.4 6.4 0 0 1 10 25.1c0-3.2 2.4-5.9 5.5-6.3.4 0 .8-.1 1.2-.1.2 1.3.3 2.5.3 3.8Z"
-                />
-                <path
-                  className={styles.treeTrunk}
-                  d="M22.2 28.5h4.2v11.8h-4.2z"
-                />
-                <path
-                  className={styles.treeGround}
-                  d="M16.5 41h15"
-                />
-              </svg>
+              <Image
+                src={TREE_LOGO_SRC}
+                alt=""
+                width={36}
+                height={36}
+                priority
+                sizes="36px"
+              />
             </span>
             <h1 className={styles.logoText}>Tree Emporium&apos;s Modpack Planner</h1>
           </div>
@@ -58,12 +50,23 @@ export default function Header({ statuses, isSyncing, lastUpdatedAt }: HeaderPro
           <button
             className={styles.legendBtn}
             onClick={() => setLegendOpen((v) => !v)}
+            aria-label={legendOpen ? 'Hide legend' : 'Show legend'}
+            aria-pressed={legendOpen}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <rect x="14" y="14" width="7" height="7" rx="1" />
+              {legendOpen ? (
+                <>
+                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </>
+              ) : (
+                <>
+                  <path d="M10.7 5.1A10.8 10.8 0 0 1 22 12a10.8 10.8 0 0 1-1.4 2.5" />
+                  <path d="M14.1 14.2a3 3 0 0 1-4.3-4.3" />
+                  <path d="M17.5 17.5A10.8 10.8 0 0 1 2 12a10.8 10.8 0 0 1 4.5-5.5" />
+                  <path d="M2 2l20 20" />
+                </>
+              )}
             </svg>
             Legend
           </button>

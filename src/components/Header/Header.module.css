@@ -18,35 +18,26 @@
 .logoIcon {
   width: 36px;
   height: 36px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 12px;
-  background: linear-gradient(145deg, #f0faef, #d9f2d5);
-  box-shadow: inset 0 0 0 1px rgba(91, 145, 89, 0.16), 0 8px 18px rgba(77, 128, 74, 0.12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #dfc2a0;
+  box-shadow: 0 4px 14px rgba(42, 21, 9, 0.16);
+  overflow: hidden;
   flex: 0 0 auto;
 }
 
-.logoIcon svg {
-  width: 28px;
-  height: 28px;
-  overflow: visible;
-}
-
-.treeCanopyBack { fill: #b9e6ae; }
-.treeCanopyFront { fill: #75bd74; }
-.treeTrunk { fill: #9a704c; rx: 1.6px; }
-
-.treeGround {
-  fill: none;
-  stroke: #4d8c58;
-  stroke-width: 3;
-  stroke-linecap: round;
+.logoIcon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .logoText {
   font-size: 22px;
   font-weight: 800;
-  background: linear-gradient(135deg, #2f6f44, #6faf68 55%, #9a704c);
+  background: linear-gradient(135deg, #4e7c45, #8ea662 46%, #7a2a0a 92%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

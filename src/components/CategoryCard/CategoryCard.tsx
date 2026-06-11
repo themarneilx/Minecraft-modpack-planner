@@ -3,6 +3,7 @@
 import { createElement, useLayoutEffect, useRef, useState, type DragEvent } from 'react';
 import type { Category, Mod, StatusInfo } from '@/lib/data';
 import { getCategoryModDisplay } from '@/lib/category-display';
+import { normalizeModStatusKeys } from '@/lib/mod-statuses';
 import type { CategoryDropLocation, DropLocation } from '@/lib/reorder';
 import { getIcon } from '@/lib/icons';
 import styles from './CategoryCard.module.css';
@@ -183,7 +184,12 @@ export default function CategoryCard({
           ) : (
             <div className={styles.modList}>
               {modDisplay.visibleMods.map((mod, index) => {
-                const status = statusMap[mod.statusKey] || { label: 'Unknown', color: '#ccc' };
+                const statusItems = normalizeModStatusKeys(mod).map((key) => ({
+                  key,
+                  label: statusMap[key]?.label ?? key,
+                  color: statusMap[key]?.color ?? '#ccc',
+                }));
+                const statusTitle = statusItems.map((status) => status.label).join(', ');
                 return (
                   <div
                     key={mod.id}
@@ -201,7 +207,7 @@ export default function CategoryCard({
                       className={`${styles.modItem} ${draggingModId === mod.id ? styles.modItemDragging : ''}`}
                       data-mod-id={mod.id}
                       data-category-id={category.id}
-                      title={status.label}
+                      title={statusTitle}
                       draggable
                       onDragStart={(event) => handleDragStart(event, mod.id)}
                       onDragEnd={onModDragEnd}
@@ -223,12 +229,21 @@ export default function CategoryCard({
                           <circle cx="11" cy="12" r="1.2" />
                         </svg>
                       </span>
-                      <span
-                        className={styles.statusDot}
-                        style={{ background: status.color }}
+                      <button
+                        type="button"
+                        className={styles.statusDots}
                         onClick={() => onChangeStatus(mod.id)}
-                        title="Click to change status"
-                      />
+                        title={`Click to edit statuses: ${statusTitle}`}
+                        aria-label={`Edit statuses for ${mod.name}: ${statusTitle}`}
+                      >
+                        {statusItems.map((status, statusIndex) => (
+                          <span
+                            key={`${mod.id}-${status.key}`}
+                            className={`${styles.statusDot} ${statusIndex === 0 ? styles.statusDotPrimary : ''}`}
+                            style={{ background: status.color }}
+                          />
+                        ))}
+                      </button>
                       <span className={styles.modName}>{mod.name}</span>
                       {mod.url && (
                         <span className={styles.modLink}>

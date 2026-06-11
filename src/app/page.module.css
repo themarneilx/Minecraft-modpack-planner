@@ -136,21 +136,256 @@
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  gap: 16px;
-  color: var(--text-muted);
+  padding: 32px;
+  color: #f7e7ca;
   font-size: 14px;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(223, 194, 160, 0.34), transparent 32%),
+    radial-gradient(circle at 18% 18%, rgba(142, 166, 98, 0.24), transparent 24%),
+    radial-gradient(circle at 82% 78%, rgba(244, 182, 75, 0.18), transparent 26%),
+    #585047;
 }
 
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent-light);
+.loadingShell {
+  position: relative;
+  display: flex;
+  width: min(520px, 92vw);
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 44px 34px 40px;
+  border: 1px solid rgba(244, 223, 191, 0.32);
+  border-radius: 38px;
+  background:
+    linear-gradient(180deg, rgba(223, 194, 160, 0.44), rgba(223, 194, 160, 0.18)),
+    rgba(88, 80, 71, 0.36);
+  box-shadow:
+    0 30px 80px rgba(39, 30, 24, 0.34),
+    inset 0 0 0 1px rgba(244, 223, 191, 0.16);
+  overflow: hidden;
+  animation: loadingPanelIn 0.72s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+.loadingShell::before {
+  content: '';
+  position: absolute;
+  inset: -42%;
+  background:
+    conic-gradient(from 110deg, transparent, rgba(244, 182, 75, 0.22), transparent 34%),
+    radial-gradient(circle, rgba(212, 235, 184, 0.18), transparent 38%);
+  animation: loadingAura 5.5s linear infinite;
+}
+
+.loadingShell::after {
+  content: '';
+  position: absolute;
+  inset: 18px;
+  border: 1px solid rgba(247, 231, 202, 0.2);
+  border-radius: 28px;
+  pointer-events: none;
+}
+
+.loadingShell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.loadingLogoFrame {
+  display: grid;
+  width: 180px;
+  height: 180px;
+  place-items: center;
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  background: #dfc2a0;
+  box-shadow:
+    0 0 0 8px rgba(212, 235, 184, 0.18),
+    0 0 0 14px rgba(122, 42, 10, 0.22),
+    0 22px 44px rgba(39, 30, 24, 0.28);
+  overflow: hidden;
+  animation:
+    loadingLogoRise 0.72s cubic-bezier(0.2, 0.9, 0.2, 1) both,
+    loadingLogoFloat 2.8s ease-in-out 0.74s infinite;
+}
+
+.loadingLogo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.loadingTextBlock {
+  text-align: center;
+  animation: loadingFadeUp 0.82s ease 0.12s both;
+}
+
+.loadingKicker {
+  margin: 0 0 8px;
+  color: #eef4d5;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 10px rgba(39, 30, 24, 0.28);
+}
+
+.loadingTitle {
+  margin: 0;
+  color: #fff0cf;
+  font-size: clamp(38px, 8vw, 64px);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+  text-shadow:
+    0 2px 0 #7a2a0a,
+    0 5px 0 rgba(47, 33, 24, 0.28),
+    0 18px 34px rgba(39, 30, 24, 0.36);
+  animation: loadingTitleGlow 2.4s ease-in-out infinite;
+}
+
+.loadingBar {
+  width: min(340px, 78vw);
+  height: 12px;
+  padding: 2px;
+  border: 2px solid #7a2a0a;
+  border-radius: 999px;
+  background: rgba(47, 33, 24, 0.72);
+  box-shadow:
+    inset 0 0 0 1px rgba(244, 182, 75, 0.22),
+    0 10px 24px rgba(39, 30, 24, 0.2);
+  overflow: hidden;
+  animation: loadingFadeUp 0.82s ease 0.22s both;
+}
+
+.loadingBarFill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8ea662, #d4ebb8, #f4b64b);
+  box-shadow: 0 0 18px rgba(244, 182, 75, 0.38);
+  transform-origin: left center;
+  animation: loadingProgress 1.15s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both;
+}
+
+.errorTitle {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.errorMessage {
+  max-width: min(720px, 90vw);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  text-align: center;
+  white-space: pre-wrap;
+}
+
+.retryBtn {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  transition: border-color 0.2s, color 0.2s, transform 0.2s;
+}
+
+.retryBtn:hover {
+  border-color: var(--accent-light);
+  color: var(--accent);
+  transform: translateY(-1px);
 }
 
 @media (max-width: 768px) {
   .packInfo { flex-direction: column; gap: 12px; padding: 16px; }
   .grid { grid-template-columns: 1fr; padding: 16px; gap: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loadingShell::before,
+  .loadingShell,
+  .loadingLogoFrame,
+  .loadingTextBlock,
+  .loadingTitle,
+  .loadingBarFill {
+    animation: none;
+  }
+}
+
+@keyframes loadingPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes loadingAura {
+  to { transform: rotate(1turn); }
+}
+
+@keyframes loadingLogoRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes loadingLogoFloat {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-5px) scale(1.018);
+  }
+}
+
+@keyframes loadingTitleGlow {
+  0%, 100% {
+    text-shadow:
+      0 2px 0 #7a2a0a,
+      0 5px 0 rgba(47, 33, 24, 0.28),
+      0 18px 34px rgba(39, 30, 24, 0.36);
+  }
+
+  50% {
+    text-shadow:
+      0 2px 0 #7a2a0a,
+      0 5px 0 rgba(47, 33, 24, 0.26),
+      0 18px 42px rgba(244, 182, 75, 0.26);
+  }
+}
+
+@keyframes loadingFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes loadingProgress {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
 }

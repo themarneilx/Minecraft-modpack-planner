@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "NODE_ENV=development node server.mjs",
+    "prebuild": "prisma generate",
     "build": "next build",
     "start": "NODE_ENV=production node server.mjs",
     "lint": "eslint"

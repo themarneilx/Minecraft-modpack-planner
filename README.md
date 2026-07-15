@@ -19,6 +19,8 @@ It is designed for one shared modpack that everyone sees at the same time: add m
 - **Custom statuses** with editable keys, labels, background colors, and text colors
 - **One primary status plus multiple additional status indicators per mod** for quick board scanning
 - **Drag-and-drop mod reordering** within a category or into another category column
+- **Group mod dragging** with explicit multi-selection across different categories
+- **Viewport edge auto-scroll while dragging** mods, groups, or category cards through long boards
 - **Drag-and-drop category reordering** from the card title bar, including each card's mod contents
 - **Stable placement indicators** for category and mod moves, including grid-gap category drop targets
 - **Collapsed long category lists** that show the first 10 mods with a "show more" control
@@ -39,6 +41,7 @@ It is designed for one shared modpack that everyone sees at the same time: add m
 
 ### Realtime Collaboration
 - **Automatic save** for pack metadata and all CRUD changes
+- **Optimistic local updates** so adding, deleting, editing, and reordering render immediately while PostgreSQL saves in the background
 - **Realtime sync for all connected users** via WebSockets
 - **No manual refresh needed** after mod, status, category, reorder, or pack changes
 - **Loading and syncing states** so users can see when the board is loading or saving
@@ -152,9 +155,20 @@ npm start
 ## How Realtime Sync Works
 
 - All writes still go through the existing REST API routes.
-- After a successful mutation, the server broadcasts `app-data-updated` over `/ws`.
-- Connected clients refetch `/api/data` and update in place.
+- The initiating browser updates its local board immediately and attaches a per-tab client ID to the write.
+- After a successful mutation, the server broadcasts `app-data-updated` with that client ID over `/ws`.
+- The initiating browser accepts the confirmed timestamp without redundantly refetching its own write.
+- Other connected clients refetch `/api/data` and update in place.
+- Failed optimistic writes reload the authoritative database state automatically.
 - The current scope is one shared modpack for everyone.
+
+## Performance Notes
+
+- `/api/data` selects only fields rendered by the client instead of serializing timestamps and relations the board does not use.
+- Mod and category reorder endpoints use one PostgreSQL bulk `UPDATE` instead of issuing one query per row.
+- Board sort paths are indexed by category order and `(categoryId, sortOrder)`.
+- The shared `updatedAt` marker uses one normal-case database update instead of a read followed by an update.
+- A server response cache is intentionally not used for the frequently changing shared board. The React board state acts as the fast local write-through cache, while PostgreSQL remains authoritative.
 
 ---
 
@@ -197,12 +211,14 @@ modpack-maker/
 │   │   ├── category-display.ts     # 10-mod preview and show-more helper
 │   │   ├── category-drop-target.ts # Visual category drag target helper
 │   │   ├── data.ts
+│   │   ├── drag-auto-scroll.ts    # Edge-scroll velocity helper
 │   │   ├── icons.ts                # Category icon registry
 │   │   ├── minecraft.ts           # Shared Minecraft version options
 │   │   ├── mod-list.ts            # Client-side mod insertion helper
 │   │   ├── mod-statuses.ts        # Primary status and multi-indicator helpers
 │   │   ├── prisma.ts
 │   │   ├── reorder.ts             # Drag-and-drop reorder helper
+│   │   ├── realtime-protocol.ts    # Per-tab mutation and websocket message protocol
 │   │   └── search.ts              # Search URL and auto-search helpers
 │   └── server/
 │       ├── curseforge-env.ts      # CurseForge API key loader and diagnostics
@@ -264,7 +280,7 @@ Mods keep `statusKey` as the primary status and expose `statusKeys` as the order
 }
 ```
 
-The route updates each listed mod's `categoryId` and `sortOrder` in one transaction, then broadcasts the realtime sync event.
+The route updates each listed mod's `categoryId` and `sortOrder` with one bulk SQL statement inside a transaction, then broadcasts the realtime sync event. Group dragging uses the same payload and includes every affected source category plus the destination category.
 
 ### Category Reorder Payload
 
@@ -276,7 +292,7 @@ The route updates each listed mod's `categoryId` and `sortOrder` in one transact
 }
 ```
 
-The route updates each listed category's `sortOrder` in one transaction, then broadcasts the realtime sync event.
+The route updates every listed category's `sortOrder` with one bulk SQL statement inside a transaction, then broadcasts the realtime sync event.
 
 ---
 
@@ -299,13 +315,11 @@ The route updates each listed category's `sortOrder` in one transaction, then br
 Useful local checks:
 
 ```bash
-node --import tsx --test src/lib/app-data.test.ts src/lib/brand-assets.test.ts src/lib/category-colors.test.ts src/lib/category-display.test.ts src/lib/category-drop-target.test.ts src/lib/loading-screen.test.ts src/lib/modal-session-keys.test.ts src/lib/mod-list.test.ts src/lib/mod-statuses.test.ts src/lib/reorder.test.ts src/lib/search.test.ts src/lib/live-status.test.ts src/server/curseforge-env.test.ts
+npm test
 npx tsc --noEmit
 npm run lint
 npm run build
 ```
-
-There is currently no `npm test` script in `package.json`; the focused helper tests above are run directly with Node's test runner.
 
 ---
 
@@ -321,7 +335,10 @@ There is currently no `npm test` script in `package.json`; the focused helper te
 - [x] Minecraft version and loader dropdowns with autosave
 - [x] Shared realtime sync over WebSockets
 - [x] Drag-and-drop mod reordering
+- [x] Multi-select group mod dragging
+- [x] Drag edge auto-scroll
 - [x] Drag-and-drop category reordering
+- [x] Optimistic add, delete, status, and reorder updates
 - [x] Auto-search while typing
 - [x] Collapsed category previews for long mod lists
 - [x] Responsive layout

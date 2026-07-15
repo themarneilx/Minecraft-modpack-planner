@@ -1,21 +1,29 @@
 import { prisma } from '@/lib/prisma';
+import { normalizeRealtimeClientId, REALTIME_CLIENT_HEADER } from '@/lib/realtime-protocol';
 import { broadcastAppDataUpdated } from './realtime';
 
-export async function notifyAppDataUpdated() {
-  const now = new Date();
-  const existingPack = await prisma.packInfo.findFirst();
-  const pack = existingPack
-    ? await prisma.packInfo.update({
-        where: { id: existingPack.id },
-        data: { updatedAt: now },
-      })
-    : await prisma.packInfo.create({
+export function getMutationClientId(request: Request) {
+  return normalizeRealtimeClientId(request.headers.get(REALTIME_CLIENT_HEADER));
+}
+
+export async function notifyAppDataUpdated(
+  sourceClientId: string | null = null,
+  confirmedUpdatedAt?: Date,
+) {
+  const now = confirmedUpdatedAt ?? new Date();
+  const updateResult = confirmedUpdatedAt
+    ? null
+    : await prisma.packInfo.updateMany({ data: { updatedAt: now } });
+
+  if (updateResult?.count === 0) {
+    await prisma.packInfo.create({
         data: {
           updatedAt: now,
         },
       });
-  const updatedAt = pack.updatedAt.toISOString();
+  }
 
-  broadcastAppDataUpdated(updatedAt);
+  const updatedAt = now.toISOString();
+  broadcastAppDataUpdated(updatedAt, sourceClientId);
   return updatedAt;
 }

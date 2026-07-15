@@ -14,9 +14,18 @@ interface SettingsModalProps {
   onClose: () => void;
   onRefresh: () => Promise<void>;
   onSyncStart: () => () => void;
+  getMutationHeaders: (includeJson?: boolean) => HeadersInit;
 }
 
-export default function SettingsModal({ open, statuses, categories, onClose, onRefresh, onSyncStart }: SettingsModalProps) {
+export default function SettingsModal({
+  open,
+  statuses,
+  categories,
+  onClose,
+  onRefresh,
+  onSyncStart,
+  getMutationHeaders,
+}: SettingsModalProps) {
   const [tab, setTab] = useState<'statuses' | 'categories'>('statuses');
   const [editing, setEditing] = useState<StatusInfo | null>(null);
   const [creating, setCreating] = useState(false);
@@ -70,7 +79,7 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
       if (editing) {
         const res = await fetch(`/api/statuses/${editing.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getMutationHeaders(),
           body: JSON.stringify({ key: formKey, label: formLabel, color: formColor, textColor: formTextColor }),
         });
         if (!res.ok) {
@@ -80,7 +89,7 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
       } else {
         const res = await fetch('/api/statuses', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getMutationHeaders(),
           body: JSON.stringify({ key: formKey, label: formLabel, color: formColor, textColor: formTextColor }),
         });
         if (!res.ok) {
@@ -104,7 +113,10 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
     if (!confirm('Delete this status?')) return;
     const finishSync = onSyncStart();
     try {
-      const res = await fetch(`/api/statuses/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/statuses/${id}`, {
+        method: 'DELETE',
+        headers: getMutationHeaders(false),
+      });
       if (!res.ok) {
         const data = await res.json();
         alert(data.error || 'Failed to delete');
@@ -152,14 +164,14 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
       if (editingCat) {
         const res = await fetch(`/api/categories/${editingCat.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getMutationHeaders(),
           body: JSON.stringify({ name: catName, icon: catIcon, headerBg }),
         });
         if (!res.ok) throw new Error('Failed to update');
       } else {
         const res = await fetch('/api/categories', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getMutationHeaders(),
           body: JSON.stringify({ name: catName, icon: catIcon, headerBg }),
         });
         if (!res.ok) throw new Error('Failed to create');
@@ -180,7 +192,10 @@ export default function SettingsModal({ open, statuses, categories, onClose, onR
     if (!confirm('Delete this category and all its mods?')) return;
     const finishSync = onSyncStart();
     try {
-      const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/categories/${id}`, {
+        method: 'DELETE',
+        headers: getMutationHeaders(false),
+      });
       if (!res.ok) {
         alert('Failed to delete');
         return;

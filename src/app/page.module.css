@@ -129,6 +129,58 @@
   padding: 24px 28px;
 }
 
+.selectionToolbar {
+  position: fixed;
+  right: 28px;
+  bottom: 24px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid rgba(85, 151, 105, 0.32);
+  border-radius: 12px;
+  background: rgba(247, 252, 248, 0.94);
+  box-shadow: 0 14px 36px rgba(45, 82, 57, 0.2);
+  color: #35664a;
+  font-size: 12px;
+  font-weight: 700;
+  backdrop-filter: blur(12px);
+  animation: selectionToolbarIn 0.2s ease both;
+}
+
+.selectionCount {
+  display: inline-grid;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  place-items: center;
+  border-radius: 999px;
+  background: #559769;
+  color: #ffffff;
+  font-family: var(--font-mono);
+}
+
+.selectionHint {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.selectionToolbar button {
+  padding: 5px 8px;
+  border: 1px solid rgba(85, 151, 105, 0.24);
+  border-radius: 7px;
+  background: #ffffff;
+  color: #35664a;
+  cursor: pointer;
+  font: 700 11px/1 var(--font);
+}
+
+@keyframes selectionToolbarIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* Loading Screen */
 .loadingScreen {
   display: flex;
@@ -306,6 +358,8 @@
 @media (max-width: 768px) {
   .packInfo { flex-direction: column; gap: 12px; padding: 16px; }
   .grid { grid-template-columns: 1fr; padding: 16px; gap: 12px; }
+  .selectionToolbar { right: 16px; bottom: 16px; left: 16px; }
+  .selectionHint { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

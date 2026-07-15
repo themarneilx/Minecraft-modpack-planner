@@ -7,7 +7,8 @@
     "prebuild": "prisma generate",
     "build": "next build",
     "start": "NODE_ENV=production node server.mjs",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --import tsx --test src/lib/*.test.ts src/server/*.test.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

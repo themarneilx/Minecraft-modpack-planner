@@ -16,12 +16,15 @@ interface CategoryCardProps {
   nextCategoryId: number | null;
   statuses: StatusInfo[];
   draggingModId: number | null;
+  draggingModIds: ReadonlySet<number>;
+  selectedModIds: ReadonlySet<number>;
   draggingCategoryId: number | null;
   activeDropTarget: DropLocation | null;
   activeCategoryDropTarget: CategoryDropLocation | null;
   onAddMod: (categoryId: number) => void;
   onRemoveMod: (modId: number) => void;
   onChangeStatus: (modId: number) => void;
+  onToggleModSelection: (modId: number) => void;
   onModDragStart: (categoryId: number, modId: number) => void;
   onModDragEnd: () => void;
   onModDragOver: (categoryId: number, beforeModId: number | null) => void;
@@ -35,12 +38,15 @@ export default function CategoryCard({
   nextCategoryId,
   statuses,
   draggingModId,
+  draggingModIds,
+  selectedModIds,
   draggingCategoryId,
   activeDropTarget,
   activeCategoryDropTarget,
   onAddMod,
   onRemoveMod,
   onChangeStatus,
+  onToggleModSelection,
   onModDragStart,
   onModDragEnd,
   onModDragOver,
@@ -89,8 +95,20 @@ export default function CategoryCard({
   }, [category.id, modDisplay.visibleMods.length, showAllMods]);
 
   function handleDragStart(event: DragEvent<HTMLDivElement>, modId: number) {
+    const groupedModIds = selectedModIds.has(modId) ? [...selectedModIds] : [modId];
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', String(modId));
+    event.dataTransfer.setData('application/x-mod-ids', groupedModIds.join(','));
+
+    if (groupedModIds.length > 1) {
+      const preview = document.createElement('div');
+      preview.className = styles.groupDragPreview;
+      preview.textContent = `${groupedModIds.length} mods`;
+      document.body.appendChild(preview);
+      event.dataTransfer.setDragImage(preview, 24, 18);
+      window.setTimeout(() => preview.remove(), 0);
+    }
+
     onModDragStart(category.id, modId);
   }
 
@@ -105,7 +123,7 @@ export default function CategoryCard({
     const isUpperHalf = event.clientY < rect.top + rect.height / 2;
     const beforeModId = isUpperHalf ? mod.id : nextVisibleModId;
 
-    if (beforeModId === draggingModId) {
+    if (beforeModId === draggingModId && draggingModIds.size === 1) {
       return;
     }
 
@@ -184,6 +202,9 @@ export default function CategoryCard({
           ) : (
             <div className={styles.modList}>
               {modDisplay.visibleMods.map((mod, index) => {
+                const isSelected = selectedModIds.has(mod.id);
+                const isDragging = draggingModIds.has(mod.id);
+                const isPending = mod.id < 0;
                 const statusItems = normalizeModStatusKeys(mod).map((key) => ({
                   key,
                   label: statusMap[key]?.label ?? key,
@@ -204,14 +225,18 @@ export default function CategoryCard({
                       onDrop={(event) => handleDrop(event, mod.id)}
                     />
                     <div
-                      className={`${styles.modItem} ${draggingModId === mod.id ? styles.modItemDragging : ''}`}
+                      className={`${styles.modItem} ${isDragging ? styles.modItemDragging : ''} ${isSelected ? styles.modItemSelected : ''} ${isPending ? styles.modItemPending : ''}`}
                       data-mod-id={mod.id}
                       data-category-id={category.id}
                       title={statusTitle}
-                      draggable
+                      draggable={!isPending}
                       onDragStart={(event) => handleDragStart(event, mod.id)}
                       onDragEnd={onModDragEnd}
-                      onDragOver={(event) => handleRowDragOver(event, mod, modDisplay.visibleMods[index + 1]?.id ?? null)}
+                      onDragOver={(event) => handleRowDragOver(
+                        event,
+                        mod,
+                        modDisplay.visibleMods.slice(index + 1).find((item) => !draggingModIds.has(item.id))?.id ?? null,
+                      )}
                       onDrop={(event) => {
                         const beforeModId = isActiveDrop(null)
                           ? null
@@ -219,6 +244,24 @@ export default function CategoryCard({
                         handleDrop(event, beforeModId);
                       }}
                     >
+                      <button
+                        type="button"
+                        className={`${styles.selectBtn} ${isSelected ? styles.selectBtnActive : ''}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onToggleModSelection(mod.id);
+                        }}
+                        disabled={isPending}
+                        title={isSelected ? 'Remove from drag selection' : 'Select for group drag'}
+                        aria-label={`${isSelected ? 'Deselect' : 'Select'} ${mod.name} for group drag`}
+                        aria-pressed={isSelected}
+                      >
+                        {isSelected && (
+                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="m2 6 2.4 2.4L10 3" />
+                          </svg>
+                        )}
+                      </button>
                       <span className={styles.dragHandle} aria-hidden="true">
                         <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
                           <circle cx="5" cy="4" r="1.2" />
@@ -260,6 +303,7 @@ export default function CategoryCard({
                         className={styles.removeBtn}
                         onClick={() => onRemoveMod(mod.id)}
                         title="Remove"
+                        disabled={isPending}
                       >
                         &times;
                       </button>

@@ -13,6 +13,7 @@ export interface ReorderableCategory<TMod extends ReorderableMod> {
 export interface DragLocation {
   modId: number;
   sourceCategoryId: number;
+  modIds?: number[];
 }
 
 export interface DropLocation {
@@ -58,17 +59,30 @@ export function moveModInCategories<
     throw new Error(`Target category ${drop.targetCategoryId} was not found`);
   }
 
-  const draggedMod = sourceCategory.mods.find((mod) => mod.id === drag.modId);
-
-  if (!draggedMod) {
-    throw new Error(`Mod ${drag.modId} was not found in category ${drag.sourceCategoryId}`);
+  const requestedIds = [...new Set(drag.modIds?.length ? drag.modIds : [drag.modId])];
+  if (!requestedIds.includes(drag.modId)) {
+    requestedIds.unshift(drag.modId);
   }
 
-  const affectedIds = new Set([drag.sourceCategoryId, drop.targetCategoryId]);
+  const requestedIdSet = new Set(requestedIds);
+  const draggedMods = categories.flatMap((category) =>
+    category.mods.filter((mod) => requestedIdSet.has(mod.id)),
+  );
+
+  if (draggedMods.length !== requestedIdSet.size) {
+    throw new Error('One or more dragged mods were not found');
+  }
+
+  const affectedIds = new Set([
+    ...categories
+      .filter((category) => category.mods.some((mod) => requestedIdSet.has(mod.id)))
+      .map((category) => category.id),
+    drop.targetCategoryId,
+  ]);
   const modsByCategory = new Map(
     categories.map((category) => [
       category.id,
-      category.mods.filter((mod) => mod.id !== drag.modId),
+      category.mods.filter((mod) => !requestedIdSet.has(mod.id)),
     ]),
   );
   const targetMods = modsByCategory.get(drop.targetCategoryId);
@@ -77,15 +91,25 @@ export function moveModInCategories<
     throw new Error(`Target category ${drop.targetCategoryId} was not found`);
   }
 
-  const insertIndex = drop.beforeModId === null
+  const originalTargetMods = targetCategory.mods;
+  const normalizedBeforeModId = drop.beforeModId !== null && requestedIdSet.has(drop.beforeModId)
+    ? originalTargetMods
+        .slice(originalTargetMods.findIndex((mod) => mod.id === drop.beforeModId) + 1)
+        .find((mod) => !requestedIdSet.has(mod.id))?.id ?? null
+    : drop.beforeModId;
+  const insertIndex = normalizedBeforeModId === null
     ? targetMods.length
-    : targetMods.findIndex((mod) => mod.id === drop.beforeModId);
+    : targetMods.findIndex((mod) => mod.id === normalizedBeforeModId);
 
   if (insertIndex < 0) {
-    throw new Error(`Drop target mod ${drop.beforeModId} was not found`);
+    throw new Error(`Drop target mod ${normalizedBeforeModId} was not found`);
   }
 
-  targetMods.splice(insertIndex, 0, { ...draggedMod, categoryId: drop.targetCategoryId });
+  targetMods.splice(
+    insertIndex,
+    0,
+    ...draggedMods.map((mod) => ({ ...mod, categoryId: drop.targetCategoryId })),
+  );
   modsByCategory.set(drop.targetCategoryId, targetMods);
 
   const nextCategories = categories.map((category) => ({

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, startTransition, type DragEvent } from 'react';
+import { useState, useEffect, useRef, type DragEvent } from 'react';
 import Image from 'next/image';
 import Header from '@/components/Header/Header';
 import CategoryCard from '@/components/CategoryCard/CategoryCard';
@@ -9,13 +9,21 @@ import StatusPicker from '@/components/StatusPicker/StatusPicker';
 import SettingsModal from '@/components/SettingsModal/SettingsModal';
 import { parseAppDataPayload } from '@/lib/app-data';
 import { TREE_LOGO_ALT, TREE_LOGO_SRC } from '@/lib/brand-assets';
+import type { DragPointer } from '@/lib/drag-auto-scroll';
 import { getCategoryDropTargetFromPoint, type CategoryDropTargetRect } from '@/lib/category-drop-target';
 import type { AppData, Mod } from '@/lib/data';
 import { getRemainingInitialLoadingMs } from '@/lib/loading-screen';
 import { MINECRAFT_VERSION_OPTIONS } from '@/lib/minecraft';
 import { getSearchModalSessionKey, getStatusModalSessionKey } from '@/lib/modal-session-keys';
-import { upsertModInCategory } from '@/lib/mod-list';
+import {
+  removeModsFromCategories,
+  replaceModInCategories,
+  updateModInCategories,
+  upsertModInCategory,
+} from '@/lib/mod-list';
 import { buildModStatusUpdate, normalizeModStatusKeys } from '@/lib/mod-statuses';
+import { parseAppDataUpdatedMessage, REALTIME_CLIENT_HEADER } from '@/lib/realtime-protocol';
+import { useDragAutoScroll } from '@/lib/use-drag-auto-scroll';
 import {
   isSameCategoryDropPosition,
   moveCategoryInList,
@@ -51,6 +59,7 @@ export default function Home() {
   // Drag-and-drop mod ordering
   const [dragState, setDragState] = useState<DragLocation | null>(null);
   const [activeDropTarget, setActiveDropTarget] = useState<DropLocation | null>(null);
+  const [selectedModIds, setSelectedModIds] = useState<Set<number>>(() => new Set());
   const [draggingCategoryId, setDraggingCategoryId] = useState<number | null>(null);
   const [activeCategoryDropTarget, setActiveCategoryDropTarget] = useState<CategoryDropLocation | null>(null);
 
@@ -61,8 +70,11 @@ export default function Home() {
   const categoryGridRef = useRef<HTMLElement | null>(null);
   const isFetchingRef = useRef(false);
   const pendingRefreshRef = useRef(false);
+  const pendingRemoteRefreshRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeSyncCountRef = useRef(0);
+  const clientIdRef = useRef('');
+  const nextTemporaryModIdRef = useRef(-1);
   const initialLoadStartedAtRef = useRef<number | null>(null);
   const initialLoadSettledRef = useRef(false);
 
@@ -74,7 +86,28 @@ export default function Home() {
       activeSyncCountRef.current = Math.max(0, activeSyncCountRef.current - 1);
       if (activeSyncCountRef.current === 0) {
         setIsSyncing(false);
+        if (pendingRemoteRefreshRef.current) {
+          pendingRemoteRefreshRef.current = false;
+          void fetchData();
+        }
       }
+    };
+  }
+
+  function getClientId() {
+    if (!clientIdRef.current) {
+      const randomId = typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      clientIdRef.current = `client-${randomId}`;
+    }
+    return clientIdRef.current;
+  }
+
+  function getMutationHeaders(includeJson = true) {
+    return {
+      ...(includeJson && { 'Content-Type': 'application/json' }),
+      [REALTIME_CLIENT_HEADER]: getClientId(),
     };
   }
 
@@ -100,6 +133,8 @@ export default function Home() {
       }
 
       setData(appData);
+      const availableModIds = new Set(appData.categories.flatMap((category) => category.mods.map((mod) => mod.id)));
+      setSelectedModIds((current) => new Set([...current].filter((modId) => availableModIds.has(modId))));
       setLoadError('');
       setLastUpdatedAt(appData.packInfo?.updatedAt ?? null);
       if (appData.packInfo) {
@@ -139,18 +174,31 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useDragAutoScroll(
+    dragState !== null || draggingCategoryId !== null,
+    handleDragAutoScrollFrame,
+  );
+
   useEffect(() => {
     let socket: WebSocket | null = null;
     let disposed = false;
 
     function connect() {
+      getClientId();
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
 
       socket.addEventListener('message', (event) => {
         try {
-          const message = JSON.parse(event.data) as { type?: string };
-          if (message.type === 'app-data-updated') {
+          const message = parseAppDataUpdatedMessage(JSON.parse(event.data));
+          if (!message) return;
+
+          setLastUpdatedAt(message.updatedAt);
+          if (message.sourceClientId === clientIdRef.current) return;
+
+          if (activeSyncCountRef.current > 0) {
+            pendingRemoteRefreshRef.current = true;
+          } else {
             void fetchData();
           }
         } catch (error) {
@@ -184,13 +232,16 @@ export default function Home() {
     try {
       const res = await fetch('/api/pack', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getMutationHeaders(),
         body: JSON.stringify({ [field]: value }),
       });
 
-      if (res.ok) {
-        await fetchData();
+      if (!res.ok) {
+        throw new Error(`Failed to update pack field with status ${res.status}`);
       }
+    } catch (error) {
+      console.error('Failed to update pack info:', error);
+      await fetchData();
     } finally {
       finishSync();
     }
@@ -223,40 +274,86 @@ export default function Home() {
   }
 
   async function handleModAdded(categoryId: number, mod: { name: string; statusKey: string; source: string; url: string }) {
+    const temporaryModId = nextTemporaryModIdRef.current;
+    nextTemporaryModIdRef.current -= 1;
+    const optimisticMod: Mod = {
+      id: temporaryModId,
+      ...mod,
+      statusKeys: [mod.statusKey],
+      categoryId,
+      sortOrder: Number.MAX_SAFE_INTEGER,
+    };
+
+    setData((current) => current
+      ? {
+          ...current,
+          categories: upsertModInCategory(current.categories, categoryId, optimisticMod),
+        }
+      : current);
+
     const finishSync = beginSync();
 
     try {
       const res = await fetch('/api/mods', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getMutationHeaders(),
         body: JSON.stringify({ ...mod, categoryId }),
       });
 
-      if (res.ok) {
-        const createdMod: Mod = await res.json();
-        startTransition(() => {
-          setData((current) => current
-            ? {
-                ...current,
-                categories: upsertModInCategory(current.categories, categoryId, createdMod),
-              }
-            : current);
-        });
-        await fetchData();
+      if (!res.ok) {
+        throw new Error(`Failed to add mod with status ${res.status}`);
       }
+
+      const createdMod: Mod = await res.json();
+      setData((current) => current
+        ? {
+            ...current,
+            categories: replaceModInCategories(current.categories, temporaryModId, createdMod),
+          }
+        : current);
+      return true;
+    } catch (error) {
+      console.error('Failed to add mod:', error);
+      setData((current) => current
+        ? {
+            ...current,
+            categories: removeModsFromCategories(current.categories, [temporaryModId]),
+          }
+        : current);
+      return false;
     } finally {
       finishSync();
     }
   }
 
   async function handleRemoveMod(modId: number) {
+    if (modId < 0) return;
+
+    setSelectedModIds((current) => {
+      const next = new Set(current);
+      next.delete(modId);
+      return next;
+    });
+    setData((current) => current
+      ? {
+          ...current,
+          categories: removeModsFromCategories(current.categories, [modId]),
+        }
+      : current);
+
     const finishSync = beginSync();
 
     try {
-      const res = await fetch(`/api/mods/${modId}`, { method: 'DELETE' });
-      if (res.ok) {
-        await fetchData();
+      const res = await fetch(`/api/mods/${modId}`, {
+        method: 'DELETE',
+        headers: getMutationHeaders(false),
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to remove mod with status ${res.status}`);
       }
+    } catch (error) {
+      console.error('Failed to remove mod:', error);
+      await fetchData();
     } finally {
       finishSync();
     }
@@ -266,6 +363,20 @@ export default function Home() {
     setEditModId(modId);
     setStatusSession((current) => current + 1);
     setStatusOpen(true);
+  }
+
+  function handleToggleModSelection(modId: number) {
+    if (modId < 0) return;
+
+    setSelectedModIds((current) => {
+      const next = new Set(current);
+      if (next.has(modId)) {
+        next.delete(modId);
+      } else {
+        next.add(modId);
+      }
+      return next;
+    });
   }
 
   function getModById(modId: number) {
@@ -289,26 +400,39 @@ export default function Home() {
       availableKeys: data.statuses.map((status) => status.key),
       fallbackStatusKey: editingMod?.statusKey ?? data.statuses[0]?.key ?? 'added',
     });
+    setStatusOpen(false);
+    setData((current) => current
+      ? {
+          ...current,
+          categories: updateModInCategories(current.categories, editModId, update),
+        }
+      : current);
     const finishSync = beginSync();
 
     try {
       const res = await fetch(`/api/mods/${editModId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getMutationHeaders(),
         body: JSON.stringify(update),
       });
 
-      if (res.ok) {
-        setStatusOpen(false);
-        await fetchData();
+      if (!res.ok) {
+        throw new Error(`Failed to update statuses with status ${res.status}`);
       }
+    } catch (error) {
+      console.error('Failed to update mod statuses:', error);
+      await fetchData();
     } finally {
       finishSync();
     }
   }
 
   function handleModDragStart(categoryId: number, modId: number) {
-    setDragState({ sourceCategoryId: categoryId, modId });
+    const modIds = selectedModIds.has(modId) ? [...selectedModIds] : [modId];
+    if (!selectedModIds.has(modId)) {
+      setSelectedModIds(new Set());
+    }
+    setDragState({ sourceCategoryId: categoryId, modId, modIds });
     setActiveDropTarget(null);
   }
 
@@ -318,7 +442,9 @@ export default function Home() {
   }
 
   function handleModDragOver(targetCategoryId: number, beforeModId: number | null) {
-    if (!dragState || beforeModId === dragState.modId) return;
+    if (!dragState) return;
+    const isSingleSelfDrop = (dragState.modIds?.length ?? 1) === 1 && beforeModId === dragState.modId;
+    if (isSingleSelfDrop) return;
 
     setActiveDropTarget((current) => {
       if (current?.targetCategoryId === targetCategoryId && current.beforeModId === beforeModId) {
@@ -330,7 +456,8 @@ export default function Home() {
   }
 
   async function handleModDrop(targetCategoryId: number, beforeModId: number | null) {
-    if (!data || !dragState || beforeModId === dragState.modId) {
+    const isSingleSelfDrop = (dragState?.modIds?.length ?? 1) === 1 && beforeModId === dragState?.modId;
+    if (!data || !dragState || isSingleSelfDrop) {
       handleModDragEnd();
       return;
     }
@@ -359,21 +486,20 @@ export default function Home() {
     });
 
     handleModDragEnd();
+    setSelectedModIds(new Set());
 
     if (!changed) {
       return;
     }
 
-    startTransition(() => {
-      setData(nextData);
-    });
+    setData(nextData);
 
     const finishSync = beginSync();
 
     try {
       const res = await fetch('/api/mods/reorder', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getMutationHeaders(),
         body: JSON.stringify({ categories: affectedCategories }),
       });
 
@@ -381,7 +507,6 @@ export default function Home() {
         throw new Error(`Reorder failed with status ${res.status}`);
       }
 
-      await fetchData();
     } catch (error) {
       console.error('Failed to save mod reorder:', error);
       await fetchData();
@@ -418,7 +543,7 @@ export default function Home() {
     });
   }
 
-  function getCategoryDropTargetFromEvent(event: DragEvent<HTMLElement>) {
+  function getCategoryDropTargetAtPoint(point: DragPointer) {
     if (draggingCategoryId === null) return null;
 
     const grid = categoryGridRef.current;
@@ -444,8 +569,55 @@ export default function Home() {
     return getCategoryDropTargetFromPoint(
       rects,
       draggingCategoryId,
-      { x: event.clientX, y: event.clientY },
+      point,
     );
+  }
+
+  function getModDropTargetAtPoint(point: DragPointer): DropLocation | null {
+    if (!dragState) return null;
+
+    const element = document.elementsFromPoint(point.x, point.y)
+      .find((candidate) => candidate instanceof HTMLElement && candidate.closest('[data-category-card="true"]'));
+    const card = element instanceof HTMLElement
+      ? element.closest<HTMLElement>('[data-category-card="true"]')
+      : null;
+    if (!card) return null;
+
+    const targetCategoryId = Number(card.dataset.categoryId);
+    if (!Number.isInteger(targetCategoryId) || targetCategoryId <= 0) return null;
+
+    const rows = Array.from(card.querySelectorAll<HTMLElement>('[data-mod-row-id]'));
+    const rowIndex = rows.findIndex((row) => point.y <= row.getBoundingClientRect().bottom);
+
+    if (rowIndex < 0) {
+      return { targetCategoryId, beforeModId: null };
+    }
+
+    const row = rows[rowIndex];
+    const rowId = Number(row.dataset.modRowId);
+    const rect = row.getBoundingClientRect();
+    const nextAvailableRow = rows
+      .slice(rowIndex + 1)
+      .find((candidate) => !dragState.modIds?.includes(Number(candidate.dataset.modRowId)));
+    const beforeModId = point.y < rect.top + rect.height / 2
+      ? rowId
+      : nextAvailableRow ? Number(nextAvailableRow.dataset.modRowId) : null;
+
+    return Number.isInteger(beforeModId) || beforeModId === null
+      ? { targetCategoryId, beforeModId }
+      : null;
+  }
+
+  function handleDragAutoScrollFrame(point: DragPointer) {
+    if (draggingCategoryId !== null) {
+      handleCategoryDragOver(getCategoryDropTargetAtPoint(point));
+      return;
+    }
+
+    const target = getModDropTargetAtPoint(point);
+    if (target) {
+      handleModDragOver(target.targetCategoryId, target.beforeModId);
+    }
   }
 
   function handleCategoryGridDragOver(event: DragEvent<HTMLElement>) {
@@ -453,14 +625,14 @@ export default function Home() {
 
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-    handleCategoryDragOver(getCategoryDropTargetFromEvent(event));
+    handleCategoryDragOver(getCategoryDropTargetAtPoint({ x: event.clientX, y: event.clientY }));
   }
 
   function handleCategoryGridDrop(event: DragEvent<HTMLElement>) {
     if (draggingCategoryId === null) return;
 
     event.preventDefault();
-    void handleCategoryDrop(getCategoryDropTargetFromEvent(event));
+    void handleCategoryDrop(getCategoryDropTargetAtPoint({ x: event.clientX, y: event.clientY }));
   }
 
   async function handleCategoryDrop(beforeCategoryId: number | null) {
@@ -497,16 +669,14 @@ export default function Home() {
       return;
     }
 
-    startTransition(() => {
-      setData(nextData);
-    });
+    setData(nextData);
 
     const finishSync = beginSync();
 
     try {
       const res = await fetch('/api/categories/reorder', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getMutationHeaders(),
         body: JSON.stringify({ categoryIds }),
       });
 
@@ -514,7 +684,6 @@ export default function Home() {
         throw new Error(`Category reorder failed with status ${res.status}`);
       }
 
-      await fetchData();
     } catch (error) {
       console.error('Failed to save category reorder:', error);
       await fetchData();
@@ -528,6 +697,7 @@ export default function Home() {
     ? data.categories.reduce((sum, cat) => sum + cat.mods.length, 0)
     : 0;
   const editingMod = data ? getModById(editModId) : null;
+  const draggingModIds = new Set(dragState?.modIds ?? (dragState ? [dragState.modId] : []));
 
   if (loading) {
     return (
@@ -638,6 +808,20 @@ export default function Home() {
         </div>
       </div>
 
+      {selectedModIds.size > 0 && (
+        <div
+          className={styles.selectionToolbar}
+          role="status"
+          aria-live="polite"
+          aria-label={`${selectedModIds.size} ${selectedModIds.size === 1 ? 'mod' : 'mods'} selected for group drag`}
+        >
+          <span className={styles.selectionCount}>{selectedModIds.size}</span>
+          <span>{selectedModIds.size === 1 ? 'mod selected' : 'mods selected'}</span>
+          <span className={styles.selectionHint}>Drag any selected mod to move the group</span>
+          <button type="button" onClick={() => setSelectedModIds(new Set())}>Clear</button>
+        </div>
+      )}
+
       {/* Category Grid */}
       <main
         ref={categoryGridRef}
@@ -652,12 +836,15 @@ export default function Home() {
             nextCategoryId={data.categories[index + 1]?.id ?? null}
             statuses={data.statuses}
             draggingModId={dragState?.modId ?? null}
+            draggingModIds={draggingModIds}
+            selectedModIds={selectedModIds}
             draggingCategoryId={draggingCategoryId}
             activeDropTarget={activeDropTarget}
             activeCategoryDropTarget={activeCategoryDropTarget}
             onAddMod={handleAddMod}
             onRemoveMod={handleRemoveMod}
             onChangeStatus={handleChangeStatus}
+            onToggleModSelection={handleToggleModSelection}
             onModDragStart={handleModDragStart}
             onModDragEnd={handleModDragEnd}
             onModDragOver={handleModDragOver}
@@ -693,6 +880,7 @@ export default function Home() {
         onClose={() => setSettingsOpen(false)}
         onRefresh={fetchData}
         onSyncStart={beginSync}
+        getMutationHeaders={getMutationHeaders}
       />
     </>
   );

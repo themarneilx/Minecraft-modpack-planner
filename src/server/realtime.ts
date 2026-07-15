@@ -14,11 +14,14 @@ export function setRealtimeServer(server: WebSocketServer) {
   getGlobalRealtimeStore()[REALTIME_SERVER_KEY] = server;
 }
 
-export function broadcastAppDataUpdated(updatedAt = new Date().toISOString()) {
+export function broadcastAppDataUpdated(
+  updatedAt = new Date().toISOString(),
+  sourceClientId: string | null = null,
+) {
   const wss = getGlobalRealtimeStore()[REALTIME_SERVER_KEY];
   if (!wss) return;
 
-  const payload = JSON.stringify({ type: 'app-data-updated', updatedAt });
+  const payload = JSON.stringify({ type: 'app-data-updated', updatedAt, sourceClientId });
 
   for (const client of wss.clients) {
     if (client.readyState === 1) {

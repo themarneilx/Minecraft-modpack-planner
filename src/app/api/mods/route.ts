@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { normalizeModStatusKeys } from '@/lib/mod-statuses';
 import { prisma } from '@/lib/prisma';
-import { notifyAppDataUpdated } from '@/server/app-updates';
+import { getMutationClientId, notifyAppDataUpdated } from '@/server/app-updates';
 
 // POST create a new mod
 export async function POST(request: Request) {
@@ -22,30 +22,24 @@ export async function POST(request: Request) {
       _max: { sortOrder: true },
     });
 
-    const mod = await prisma.$transaction(async (tx) => {
-      const createdMod = await tx.mod.create({
-        data: {
-          name,
-          statusKey: normalizedStatusKeys[0],
-          source: source || '',
-          url: url || '',
-          categoryId,
-          sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
+    const mod = await prisma.mod.create({
+      data: {
+        name,
+        statusKey: normalizedStatusKeys[0],
+        source: source || '',
+        url: url || '',
+        categoryId,
+        sortOrder: (maxSort._max.sortOrder ?? -1) + 1,
+        statusIndicators: {
+          create: normalizedStatusKeys.map((key, index) => ({
+            statusKey: key,
+            sortOrder: index,
+          })),
         },
-      });
-
-      await tx.modStatus.createMany({
-        data: normalizedStatusKeys.map((key, index) => ({
-          modId: createdMod.id,
-          statusKey: key,
-          sortOrder: index,
-        })),
-      });
-
-      return createdMod;
+      },
     });
 
-    await notifyAppDataUpdated();
+    await notifyAppDataUpdated(getMutationClientId(request));
     return NextResponse.json({ ...mod, statusKeys: normalizedStatusKeys }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

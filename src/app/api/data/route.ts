@@ -6,13 +6,35 @@ import { prisma } from '@/lib/prisma';
 export async function GET() {
   try {
     const [statuses, categories, packInfo] = await Promise.all([
-      prisma.status.findMany({ orderBy: { sortOrder: 'asc' } }),
+      prisma.status.findMany({
+        orderBy: { sortOrder: 'asc' },
+        select: {
+          id: true,
+          key: true,
+          label: true,
+          color: true,
+          textColor: true,
+          sortOrder: true,
+        },
+      }),
       prisma.category.findMany({
         orderBy: { sortOrder: 'asc' },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          icon: true,
+          headerBg: true,
+          sortOrder: true,
           mods: {
             orderBy: { sortOrder: 'asc' },
-            include: {
+            select: {
+              id: true,
+              name: true,
+              statusKey: true,
+              source: true,
+              url: true,
+              sortOrder: true,
+              categoryId: true,
               statusIndicators: {
                 orderBy: { sortOrder: 'asc' },
                 select: { statusKey: true },
@@ -21,7 +43,15 @@ export async function GET() {
           },
         },
       }),
-      prisma.packInfo.findFirst(),
+      prisma.packInfo.findFirst({
+        select: {
+          id: true,
+          name: true,
+          mcVersion: true,
+          loader: true,
+          updatedAt: true,
+        },
+      }),
     ]);
 
     const serializedCategories = categories.map((category) => ({

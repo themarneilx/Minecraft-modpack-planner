@@ -72,6 +72,47 @@ test('moves a mod into another category at the requested position', () => {
   ]);
 });
 
+test('moves a selected group across categories while preserving board order', () => {
+  const result = moveModInCategories(
+    [
+      category(1, [mod(10, 1, 0), mod(11, 1, 1)]),
+      category(2, [mod(20, 2, 0), mod(21, 2, 1)]),
+      category(3, [mod(30, 3, 0)]),
+    ],
+    { modId: 11, sourceCategoryId: 1, modIds: [21, 11, 30] },
+    { targetCategoryId: 2, beforeModId: 20 },
+  );
+
+  assert.deepEqual(
+    result.categories.map((group) => group.mods.map((item) => [item.id, item.categoryId, item.sortOrder])),
+    [
+      [[10, 1, 0]],
+      [
+        [11, 2, 0],
+        [21, 2, 1],
+        [30, 2, 2],
+        [20, 2, 3],
+      ],
+      [],
+    ],
+  );
+  assert.deepEqual(result.affectedCategories, [
+    { categoryId: 1, modIds: [10] },
+    { categoryId: 2, modIds: [11, 21, 30, 20] },
+    { categoryId: 3, modIds: [] },
+  ]);
+});
+
+test('dropping a selected group on one of its rows resolves to the next unselected row', () => {
+  const result = moveModInCategories(
+    [category(1, [mod(10, 1, 0), mod(11, 1, 1), mod(12, 1, 2), mod(13, 1, 3)])],
+    { modId: 10, sourceCategoryId: 1, modIds: [10, 11] },
+    { targetCategoryId: 1, beforeModId: 11 },
+  );
+
+  assert.deepEqual(result.categories[0].mods.map((item) => item.id), [10, 11, 12, 13]);
+});
+
 test('moves a category before another category and preserves its mods', () => {
   const result = moveCategoryInList(
     [

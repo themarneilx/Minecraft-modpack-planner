@@ -11,7 +11,7 @@ interface SearchModalProps {
   categoryId: number;
   statuses: StatusInfo[];
   onClose: () => void;
-  onAddMod: (categoryId: number, mod: { name: string; statusKey: string; source: string; url: string }) => Promise<void> | void;
+  onAddMod: (categoryId: number, mod: { name: string; statusKey: string; source: string; url: string }) => Promise<boolean> | boolean;
 }
 
 function formatNumber(n: number): string {
@@ -123,23 +123,26 @@ export default function SearchModal({ open, categoryId, statuses, onClose, onAdd
   }, [open, query, source, version, loader]);
 
   async function handleAdd(mod: SearchResult) {
-    await onAddMod(categoryId, {
+    const added = await onAddMod(categoryId, {
       name: mod.name,
       statusKey: defaultStatusKey,
       source: mod.source,
       url: mod.url,
     });
-    setAddedUrls((prev) => new Set([...prev, mod.url]));
+    if (added) {
+      setAddedUrls((prev) => new Set([...prev, mod.url]));
+    }
   }
 
   async function handleManualAdd() {
     if (!manualName.trim()) return;
-    await onAddMod(categoryId, {
+    const added = await onAddMod(categoryId, {
       name: manualName.trim(),
       statusKey: statuses[0]?.key || 'added',
       source: 'manual',
       url: manualUrl.trim(),
     });
+    if (!added) return;
     setManualAdded(true);
     setManualName('');
     setManualUrl('');

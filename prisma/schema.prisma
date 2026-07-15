@@ -27,6 +27,7 @@ model Status {
   mods      Mod[]
   indicators ModStatus[]
 
+  @@index([sortOrder])
   @@map("statuses")
 }
 
@@ -39,6 +40,7 @@ model Category {
   createdAt DateTime @default(now()) @map("created_at")
   mods      Mod[]
 
+  @@index([sortOrder])
   @@map("categories")
 }
 
@@ -56,6 +58,7 @@ model Mod {
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   statusIndicators ModStatus[]
 
+  @@index([categoryId, sortOrder])
   @@map("mods")
 }
 
@@ -69,5 +72,6 @@ model ModStatus {
   status Status @relation(fields: [statusKey], references: [key], onDelete: Restrict)
 
   @@id([modId, statusKey])
+  @@index([statusKey])
   @@map("mod_statuses")
 }

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { normalizeModStatusKeys } from '@/lib/mod-statuses';
 import { prisma } from '@/lib/prisma';
-import { notifyAppDataUpdated } from '@/server/app-updates';
+import { getMutationClientId, notifyAppDataUpdated } from '@/server/app-updates';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -64,7 +64,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       };
     });
 
-    await notifyAppDataUpdated();
+    await notifyAppDataUpdated(getMutationClientId(request));
     return NextResponse.json(mod);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -73,11 +73,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 }
 
 // DELETE a mod
-export async function DELETE(_request: NextRequest, context: RouteContext) {
+export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
     await prisma.mod.delete({ where: { id: parseInt(id) } });
-    await notifyAppDataUpdated();
+    await notifyAppDataUpdated(getMutationClientId(request));
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

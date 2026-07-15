@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { notifyAppDataUpdated } from '@/server/app-updates';
+import { getMutationClientId, notifyAppDataUpdated } from '@/server/app-updates';
 
 interface CategoryOrderRequest {
   categoryId: number;
   modIds: number[];
 }
+
+class ReorderTargetNotFoundError extends Error {}
 
 function isIntegerId(value: unknown): value is number {
   return Number.isInteger(value) && Number(value) > 0;
@@ -59,40 +62,51 @@ export async function PATCH(request: Request) {
     }
 
     const categoryIds = categories.map((category) => category.categoryId);
-    const modIds = categories.flatMap((category) => category.modIds);
-
-    const [categoryCount, modCount] = await Promise.all([
-      prisma.category.count({ where: { id: { in: categoryIds } } }),
-      modIds.length > 0 ? prisma.mod.count({ where: { id: { in: modIds } } }) : Promise.resolve(0),
-    ]);
+    const categoryCount = await prisma.category.count({ where: { id: { in: categoryIds } } });
 
     if (categoryCount !== categoryIds.length) {
       return NextResponse.json({ error: 'One or more categories were not found' }, { status: 404 });
     }
 
-    if (modCount !== modIds.length) {
-      return NextResponse.json({ error: 'One or more mods were not found' }, { status: 404 });
-    }
-
-    const updates = categories.flatMap((category) =>
-      category.modIds.map((modId, sortOrder) =>
-        prisma.mod.update({
-          where: { id: modId },
-          data: {
-            categoryId: category.categoryId,
-            sortOrder,
-          },
-        }),
-      ),
+    const rows = categories.flatMap((category) =>
+      category.modIds.map((modId, sortOrder) => ({
+        modId,
+        categoryId: category.categoryId,
+        sortOrder,
+      })),
     );
 
-    if (updates.length > 0) {
-      await prisma.$transaction(updates);
+    if (rows.length > 0) {
+      await prisma.$transaction(async (tx) => {
+        const affectedRows = await tx.$executeRaw(
+          Prisma.sql`
+            UPDATE "mods" AS mod
+            SET
+              "category_id" = reordered.category_id,
+              "sort_order" = reordered.sort_order
+            FROM (
+              VALUES ${Prisma.join(rows.map((row) => Prisma.sql`(
+                ${row.modId}::integer,
+                ${row.categoryId}::integer,
+                ${row.sortOrder}::integer
+              )`))}
+            ) AS reordered(id, category_id, sort_order)
+            WHERE mod.id = reordered.id
+          `,
+        );
+
+        if (affectedRows !== rows.length) {
+          throw new ReorderTargetNotFoundError('One or more mods were not found');
+        }
+      });
     }
 
-    await notifyAppDataUpdated();
+    await notifyAppDataUpdated(getMutationClientId(request));
     return NextResponse.json({ success: true });
   } catch (err) {
+    if (err instanceof ReorderTargetNotFoundError) {
+      return NextResponse.json({ error: err.message }, { status: 404 });
+    }
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { notifyAppDataUpdated } from '@/server/app-updates';
+import { getMutationClientId, notifyAppDataUpdated } from '@/server/app-updates';
 
 function isIntegerId(value: unknown): value is number {
   return Number.isInteger(value) && Number(value) > 0;
 }
+
+class ReorderTargetNotFoundError extends Error {}
 
 function parseCategoryIds(value: unknown): number[] | null {
   if (!Array.isArray(value) || value.length === 0) {
@@ -33,24 +36,32 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Invalid category reorder payload' }, { status: 400 });
     }
 
-    const categoryCount = await prisma.category.count({ where: { id: { in: categoryIds } } });
+    await prisma.$transaction(async (tx) => {
+      const affectedRows = await tx.$executeRaw(
+        Prisma.sql`
+          UPDATE "categories" AS category
+          SET "sort_order" = reordered.sort_order
+          FROM (
+            VALUES ${Prisma.join(categoryIds.map((categoryId, sortOrder) => Prisma.sql`(
+              ${categoryId}::integer,
+              ${sortOrder}::integer
+            )`))}
+          ) AS reordered(id, sort_order)
+          WHERE category.id = reordered.id
+        `,
+      );
 
-    if (categoryCount !== categoryIds.length) {
-      return NextResponse.json({ error: 'One or more categories were not found' }, { status: 404 });
-    }
+      if (affectedRows !== categoryIds.length) {
+        throw new ReorderTargetNotFoundError('One or more categories were not found');
+      }
+    });
 
-    await prisma.$transaction(
-      categoryIds.map((categoryId, sortOrder) =>
-        prisma.category.update({
-          where: { id: categoryId },
-          data: { sortOrder },
-        }),
-      ),
-    );
-
-    await notifyAppDataUpdated();
+    await notifyAppDataUpdated(getMutationClientId(request));
     return NextResponse.json({ success: true });
   } catch (err) {
+    if (err instanceof ReorderTargetNotFoundError) {
+      return NextResponse.json({ error: err.message }, { status: 404 });
+    }
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
   }

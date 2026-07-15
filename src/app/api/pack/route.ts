@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { notifyAppDataUpdated } from '@/server/app-updates';
+import { getMutationClientId, notifyAppDataUpdated } from '@/server/app-updates';
 
 // GET pack info
 export async function GET() {
@@ -39,7 +39,7 @@ export async function PUT(request: Request) {
       });
     }
 
-    await notifyAppDataUpdated();
+    await notifyAppDataUpdated(getMutationClientId(request), pack.updatedAt);
     return NextResponse.json(pack);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

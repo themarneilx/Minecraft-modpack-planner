@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { notifyAppDataUpdated } from '@/server/app-updates';
+import { getMutationClientId, notifyAppDataUpdated } from '@/server/app-updates';
 
 // GET all categories (with mods)
 export async function GET() {
@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       include: { mods: true },
     });
 
-    await notifyAppDataUpdated();
+    await notifyAppDataUpdated(getMutationClientId(request));
     return NextResponse.json(category, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

@@ -1,11 +1,16 @@
 import { createServer } from 'http';
+import nextEnv from '@next/env';
 import next from 'next';
 import { WebSocketServer } from 'ws';
+import { parseServerPort } from './src/server/server-port.mjs';
 
+const { loadEnvConfig } = nextEnv;
 const REALTIME_SERVER_KEY = Symbol.for('modpack-maker.realtime.server');
 const dev = process.env.NODE_ENV !== 'production';
+loadEnvConfig(process.cwd(), dev);
+
 const hostname = process.env.HOST || '0.0.0.0';
-const port = parseInt(process.env.PORT || '3000', 10);
+const port = parseServerPort(process.env.PORT);
 
 async function main() {
   let handleRequest = null;

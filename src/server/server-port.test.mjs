@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { parseServerPort } from './server-port.mjs';
 
 const projectDir = fileURLToPath(new URL('../../', import.meta.url));
 const serverPath = fileURLToPath(new URL('../../server.mjs', import.meta.url));
+const serverPortModuleUrl = new URL('./server-port.mjs', import.meta.url).href;
 
 test('defaults to port 3000 when PORT is missing or blank', () => {
   assert.equal(parseServerPort(undefined), 3000);
@@ -44,6 +48,20 @@ test('rejects unsafe integer PORT values', () => {
   );
 });
 
+test('loads PORT from a root env file when the process does not define it', () => {
+  assert.deepEqual(loadConfigInIsolatedProcess('PORT=3102\nHOST=env-host\n'), {
+    hostname: 'env-host',
+    port: 3102,
+  });
+});
+
+test('prefers process PORT over a root env file value', () => {
+  assert.deepEqual(loadConfigInIsolatedProcess('PORT=3102\nHOST=env-host\n', '3103'), {
+    hostname: 'env-host',
+    port: 3103,
+  });
+});
+
 test('custom server reaches PORT validation during startup', () => {
   const result = spawnSync(process.execPath, [serverPath], {
     cwd: projectDir,
@@ -57,3 +75,39 @@ test('custom server reaches PORT validation during startup', () => {
     /Invalid PORT "1\.5": expected a decimal integer from 1 to 65535/,
   );
 });
+
+function loadConfigInIsolatedProcess(envContents, processPort) {
+  const temporaryProjectDir = mkdtempSync(join(tmpdir(), 'modpack-maker-server-port-'));
+
+  try {
+    writeFileSync(join(temporaryProjectDir, '.env'), envContents, 'utf8');
+
+    const childEnv = { ...process.env, NODE_ENV: 'development' };
+    delete childEnv.HOST;
+    delete childEnv.PORT;
+    delete childEnv.__NEXT_PROCESSED_ENV;
+
+    if (processPort !== undefined) {
+      childEnv.PORT = processPort;
+    }
+
+    const childScript = `
+      import { loadServerConfig } from ${JSON.stringify(serverPortModuleUrl)};
+      process.stdout.write(JSON.stringify(loadServerConfig(process.cwd(), true)));
+    `;
+    const result = spawnSync(
+      process.execPath,
+      ['--input-type=module', '--eval', childScript],
+      {
+        cwd: temporaryProjectDir,
+        env: childEnv,
+        encoding: 'utf8',
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(result.stdout);
+  } finally {
+    rmSync(temporaryProjectDir, { recursive: true, force: true });
+  }
+}

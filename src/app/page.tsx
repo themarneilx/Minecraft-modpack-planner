@@ -890,6 +890,7 @@ export default function Home() {
             key={cat.id}
             category={cat}
             revealedModId={revealedMod?.modId ?? null}
+            revealRequestId={revealedMod?.requestId ?? null}
             nextCategoryId={data.categories[index + 1]?.id ?? null}
             statuses={data.statuses}
             draggingModId={dragState?.modId ?? null}

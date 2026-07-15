@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Mod } from './data';
-import { getCategoryModDisplay, MOD_PREVIEW_LIMIT } from './category-display';
+import {
+  getCategoryModDisplay,
+  getCategoryModRowKey,
+  MOD_PREVIEW_LIMIT,
+} from './category-display';
 
 function mod(id: number): Mod {
   return {
@@ -45,9 +49,42 @@ test('shows all mods when an oversized category is expanded', () => {
 
 test('shows all mods when a revealed mod is beyond the collapsed preview', () => {
   const mods = Array.from({ length: MOD_PREVIEW_LIMIT + 2 }, (_, index) => mod(index + 1));
-  const display = getCategoryModDisplay(mods, false, MOD_PREVIEW_LIMIT + 2);
+  const display = getCategoryModDisplay(mods, false, MOD_PREVIEW_LIMIT + 1);
 
   assert.equal(display.canExpand, true);
   assert.equal(display.hiddenCount, 0);
   assert.deepEqual(display.visibleMods.map((item) => item.id), mods.map((item) => item.id));
+});
+
+test('keeps a visible revealed mod within the collapsed preview', () => {
+  const mods = Array.from({ length: MOD_PREVIEW_LIMIT + 2 }, (_, index) => mod(index + 1));
+  const display = getCategoryModDisplay(mods, false, MOD_PREVIEW_LIMIT);
+
+  assert.equal(display.canExpand, true);
+  assert.equal(display.hiddenCount, 2);
+  assert.deepEqual(display.visibleMods.map((item) => item.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+});
+
+test('keeps collapsed display for absent and null revealed mods', () => {
+  const mods = Array.from({ length: MOD_PREVIEW_LIMIT + 2 }, (_, index) => mod(index + 1));
+
+  for (const revealedModId of [MOD_PREVIEW_LIMIT + 3, null]) {
+    const display = getCategoryModDisplay(mods, false, revealedModId);
+
+    assert.equal(display.canExpand, true);
+    assert.equal(display.hiddenCount, 2);
+    assert.deepEqual(display.visibleMods.map((item) => item.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  }
+});
+
+test('changes only the matched row key for a new reveal request', () => {
+  const firstMatchedKey = getCategoryModRowKey(12, 12, 1);
+  const repeatedMatchedKey = getCategoryModRowKey(12, 12, 2);
+  const firstUnmatchedKey = getCategoryModRowKey(1, 12, 1);
+  const repeatedUnmatchedKey = getCategoryModRowKey(1, 12, 2);
+
+  assert.equal(getCategoryModRowKey(12, 12, 1), firstMatchedKey);
+  assert.notEqual(repeatedMatchedKey, firstMatchedKey);
+  assert.equal(firstUnmatchedKey, 1);
+  assert.equal(repeatedUnmatchedKey, firstUnmatchedKey);
 });

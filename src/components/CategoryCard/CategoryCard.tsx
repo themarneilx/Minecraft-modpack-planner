@@ -2,7 +2,11 @@
 
 import { createElement, useLayoutEffect, useRef, useState, type DragEvent } from 'react';
 import type { Category, Mod, StatusInfo } from '@/lib/data';
-import { getCategoryModDisplay } from '@/lib/category-display';
+import {
+  getCategoryModDisplay,
+  getCategoryModRowKey,
+  isCategoryModHidden,
+} from '@/lib/category-display';
 import { normalizeModStatusKeys } from '@/lib/mod-statuses';
 import type { CategoryDropLocation, DropLocation } from '@/lib/reorder';
 import { getIcon } from '@/lib/icons';
@@ -14,6 +18,7 @@ const MASONRY_GAP = 16;
 interface CategoryCardProps {
   category: Category;
   revealedModId: number | null;
+  revealRequestId: number | null;
   nextCategoryId: number | null;
   statuses: StatusInfo[];
   draggingModId: number | null;
@@ -37,6 +42,7 @@ interface CategoryCardProps {
 export default function CategoryCard({
   category,
   revealedModId,
+  revealRequestId,
   nextCategoryId,
   statuses,
   draggingModId,
@@ -60,10 +66,9 @@ export default function CategoryCard({
   const slotRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const statusMap = Object.fromEntries(statuses.map((s) => [s.key, s]));
-  const revealedModBelongsToCategory = revealedModId !== null
-    && category.mods.some((mod) => mod.id === revealedModId);
+  const revealsHiddenMod = isCategoryModHidden(category.mods, revealedModId);
   const modDisplay = getCategoryModDisplay(category.mods, showAllMods, revealedModId);
-  const isShowingAllMods = showAllMods || revealedModBelongsToCategory;
+  const isShowingAllMods = showAllMods || revealsHiddenMod;
   const isCategoryDragging = draggingCategoryId !== null;
   const categoryDropBeforeActive = activeCategoryDropTarget?.beforeCategoryId === category.id;
   const categoryDropAfterActive = activeCategoryDropTarget?.beforeCategoryId === null && nextCategoryId === null;
@@ -74,13 +79,13 @@ export default function CategoryCard({
   }
 
   useLayoutEffect(() => {
-    if (!revealedModBelongsToCategory) return;
+    if (!revealsHiddenMod) return;
 
     // The helper renders the match immediately; persist that expansion outside the effect body.
     const frameId = window.requestAnimationFrame(() => setShowAllMods(true));
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [revealedModBelongsToCategory, revealedModId]);
+  }, [revealRequestId, revealedModId, revealsHiddenMod]);
 
   useLayoutEffect(() => {
     const slot = slotRef.current;
@@ -228,7 +233,7 @@ export default function CategoryCard({
                 const statusTitle = statusItems.map((status) => status.label).join(', ');
                 return (
                   <div
-                    key={mod.id}
+                    key={getCategoryModRowKey(mod.id, revealedModId, revealRequestId)}
                     className={styles.modRow}
                     data-mod-row-id={mod.id}
                   >

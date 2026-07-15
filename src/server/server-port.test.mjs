@@ -1,18 +1,19 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { parseServerPort } from './server-port.mjs';
 
 const CHILD_PROCESS_TIMEOUT_MS = 10_000;
+const SERVER_STARTUP_TIMEOUT_MS = 20_000;
 const projectDir = fileURLToPath(new URL('../../', import.meta.url));
 const serverPath = fileURLToPath(new URL('../../server.mjs', import.meta.url));
 const serverPortModuleUrl = new URL('./server-port.mjs', import.meta.url).href;
-const nextEnvModuleUrl = pathToFileURL(createRequire(import.meta.url).resolve('@next/env')).href;
 
 test('defaults to port 3000 when PORT is missing or blank', () => {
   assert.equal(parseServerPort(undefined), 3000);
@@ -51,43 +52,110 @@ test('rejects unsafe integer PORT values', () => {
   );
 });
 
-test('loads PORT from a root env file when the process does not define it', () => {
-  assert.deepEqual(loadConfigInIsolatedProcess('PORT=3102\nHOST=env-host\n'), {
-    hostname: 'env-host',
-    port: 3102,
+test('resolves development files in precedence order per key', () => {
+  assert.deepEqual(loadConfigInIsolatedProcess({
+    '.env.development.local': 'HOST=development-local-host\n',
+    '.env.local': 'PORT=4102\nHOST=local-host\n',
+    '.env.development': 'PORT=4103\nHOST=development-host\n',
+    '.env': 'PORT=4104\nHOST=base-host\n',
+  }, { NODE_ENV: 'development' }), {
+    hostname: 'development-local-host',
+    port: 4102,
   });
 });
 
-test('prefers process PORT over a root env file value', () => {
-  assert.deepEqual(loadConfigInIsolatedProcess('PORT=3102\nHOST=env-host\n', '3103'), {
-    hostname: 'env-host',
-    port: 3103,
+test('resolves production files in precedence order per key', () => {
+  assert.deepEqual(loadConfigInIsolatedProcess({
+    '.env.production.local': 'PORT=4201\n',
+    '.env.local': 'PORT=4202\nHOST=production-local-host\n',
+    '.env.production': 'PORT=4203\nHOST=production-host\n',
+    '.env': 'PORT=4204\nHOST=base-host\n',
+  }, { NODE_ENV: 'production' }), {
+    hostname: 'production-local-host',
+    port: 4201,
   });
 });
 
-test('preserves runtime environment additions across forced env reloads', () => {
+test('prefers supplied process environment over every env file', () => {
+  assert.deepEqual(loadConfigInIsolatedProcess({
+    '.env.development.local': 'PORT=4301\nHOST=file-host\n',
+    '.env.local': 'PORT=4302\nHOST=local-host\n',
+    '.env.development': 'PORT=4303\nHOST=development-host\n',
+    '.env': 'PORT=4304\nHOST=base-host\n',
+  }, {
+    NODE_ENV: 'development',
+    PORT: '4305',
+    HOST: 'process-host',
+  }), {
+    hostname: 'process-host',
+    port: 4305,
+  });
+});
+
+test('excludes .env.local in the test environment', () => {
+  assert.deepEqual(loadConfigInIsolatedProcess({
+    '.env.local': 'PORT=4401\nHOST=excluded-local-host\n',
+    '.env.test': 'PORT=4402\nHOST=test-host\n',
+    '.env': 'PORT=4403\nHOST=base-host\n',
+  }, { NODE_ENV: 'test' }), {
+    hostname: 'test-host',
+    port: 4402,
+  });
+});
+
+test('reflects rewritten and removed env file values without caching', () => {
   const childScript = `
-    import nextEnv from ${JSON.stringify(nextEnvModuleUrl)};
-    import {
-      loadServerConfig,
-      synchronizeServerEnvironmentSnapshot,
-    } from ${JSON.stringify(serverPortModuleUrl)};
+    import { rmSync, writeFileSync } from 'node:fs';
+    import { join } from 'node:path';
+    import { loadServerConfig } from ${JSON.stringify(serverPortModuleUrl)};
 
-    loadServerConfig(process.cwd(), true);
-    process.env.TURBOPACK = 'auto';
-    process.env.RUNTIME_SNAPSHOT_TEST_FLAG = 'preserved';
-    synchronizeServerEnvironmentSnapshot();
-    nextEnv.loadEnvConfig(process.cwd(), true, console, true);
+    const environment = { NODE_ENV: 'development' };
+    const first = loadServerConfig(process.cwd(), environment);
+    writeFileSync(join(process.cwd(), '.env'), 'PORT=4502\\nHOST=second-host\\n');
+    const second = loadServerConfig(process.cwd(), environment);
+    rmSync(join(process.cwd(), '.env'));
+    const third = loadServerConfig(process.cwd(), environment);
+
+    process.stdout.write(JSON.stringify({ first, second, third }));
+  `;
+
+  assert.deepEqual(runChildInTemporaryProject({
+    '.env': 'PORT=4501\nHOST=first-host\n',
+  }, childScript, { NODE_ENV: 'development' }), {
+    first: { hostname: 'first-host', port: 4501 },
+    second: { hostname: 'second-host', port: 4502 },
+    third: { hostname: '0.0.0.0', port: 3000 },
+  });
+});
+
+test('does not mutate supplied or global process environment objects', () => {
+  const childScript = `
+    import { loadServerConfig } from ${JSON.stringify(serverPortModuleUrl)};
+
+    const environment = {
+      NODE_ENV: 'development',
+      PORT: '4601',
+      HOST: 'supplied-host',
+      SUPPLIED_SENTINEL: 'unchanged',
+    };
+    const suppliedBefore = JSON.stringify(environment);
+    const processBefore = JSON.stringify(process.env);
+    const config = loadServerConfig(process.cwd(), environment);
 
     process.stdout.write(JSON.stringify({
-      turbopack: process.env.TURBOPACK,
-      genericFlag: process.env.RUNTIME_SNAPSHOT_TEST_FLAG,
+      config,
+      suppliedUnchanged: JSON.stringify(environment) === suppliedBefore,
+      processUnchanged: JSON.stringify(process.env) === processBefore,
+      leakedFileValue: process.env.FILE_ONLY_SENTINEL,
     }));
   `;
 
-  assert.deepEqual(runChildInTemporaryProject('PORT=3102\n', childScript), {
-    turbopack: 'auto',
-    genericFlag: 'preserved',
+  assert.deepEqual(runChildInTemporaryProject({
+    '.env': 'PORT=4602\nHOST=file-host\nFILE_ONLY_SENTINEL=must-not-leak\n',
+  }, childScript, { NODE_ENV: 'development' }), {
+    config: { hostname: 'supplied-host', port: 4601 },
+    suppliedUnchanged: true,
+    processUnchanged: true,
   });
 });
 
@@ -106,29 +174,69 @@ test('custom server reaches PORT validation during startup', () => {
   );
 });
 
-function loadConfigInIsolatedProcess(envContents, processPort) {
+test('custom server starts on a non-default process port', { timeout: 30_000 }, async () => {
+  const port = await getAvailablePort();
+  assert.notEqual(port, 3000);
+
+  const child = spawn(process.execPath, [serverPath], {
+    cwd: projectDir,
+    env: {
+      ...process.env,
+      NODE_ENV: 'development',
+      HOST: '127.0.0.1',
+      PORT: String(port),
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stderr = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk;
+  });
+
+  try {
+    await waitForChildOutput(
+      child,
+      `> Server listening at http://127.0.0.1:${port}`,
+      () => stderr,
+    );
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/data`, {
+      signal: AbortSignal.timeout(CHILD_PROCESS_TIMEOUT_MS),
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(Object.keys(await response.json()), ['statuses', 'categories', 'packInfo']);
+  } finally {
+    await stopChild(child);
+  }
+});
+
+function loadConfigInIsolatedProcess(envFiles, environment) {
   const childScript = `
     import { loadServerConfig } from ${JSON.stringify(serverPortModuleUrl)};
-    process.stdout.write(JSON.stringify(loadServerConfig(process.cwd(), true)));
+    process.stdout.write(JSON.stringify(
+      loadServerConfig(process.cwd(), ${JSON.stringify(environment)})
+    ));
   `;
 
   return runChildInTemporaryProject(
-    envContents,
+    envFiles,
     childScript,
-    processPort === undefined ? {} : { PORT: processPort },
+    { NODE_ENV: environment.NODE_ENV },
   );
 }
 
-function runChildInTemporaryProject(envContents, childScript, environmentOverrides = {}) {
+function runChildInTemporaryProject(envFiles, childScript, environmentOverrides = {}) {
   const temporaryProjectDir = mkdtempSync(join(tmpdir(), 'modpack-maker-server-port-'));
 
   try {
-    writeFileSync(join(temporaryProjectDir, '.env'), envContents, 'utf8');
+    for (const [fileName, contents] of Object.entries(envFiles)) {
+      writeFileSync(join(temporaryProjectDir, fileName), contents, 'utf8');
+    }
 
-    const childEnv = { ...process.env, NODE_ENV: 'development' };
+    const childEnv = { ...process.env };
     delete childEnv.HOST;
     delete childEnv.PORT;
-    delete childEnv.RUNTIME_SNAPSHOT_TEST_FLAG;
     delete childEnv.TURBOPACK;
     delete childEnv.__NEXT_PROCESSED_ENV;
     Object.assign(childEnv, environmentOverrides);
@@ -158,4 +266,78 @@ function assertChildCompleted(result, expectedStatus) {
 
   assert.equal(result.signal, null, `Child process terminated by signal ${result.signal}`);
   assert.equal(result.status, expectedStatus, result.stderr);
+}
+
+async function getAvailablePort() {
+  const probe = createNetServer();
+
+  await new Promise((resolve, reject) => {
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', resolve);
+  });
+
+  const address = probe.address();
+  assert.equal(typeof address, 'object');
+  const port = address.port;
+  await new Promise((resolve, reject) => probe.close((error) => error ? reject(error) : resolve()));
+  return port === 3000 ? getAvailablePort() : port;
+}
+
+function waitForChildOutput(child, expectedOutput, getStderr) {
+  return new Promise((resolve, reject) => {
+    let stdout = '';
+    const timer = setTimeout(() => {
+      finish(reject, new Error(
+        `Server startup timed out after ${SERVER_STARTUP_TIMEOUT_MS}ms.\n${getStderr()}`,
+      ));
+    }, SERVER_STARTUP_TIMEOUT_MS);
+
+    const onData = (chunk) => {
+      stdout += chunk;
+      if (stdout.includes(expectedOutput)) {
+        finish(resolve);
+      }
+    };
+    const onError = (error) => finish(reject, error);
+    const onExit = (code, signal) => finish(
+      reject,
+      new Error(`Server exited before startup (code ${code}, signal ${signal}).\n${getStderr()}`),
+    );
+    const finish = (callback, value) => {
+      clearTimeout(timer);
+      child.stdout.off('data', onData);
+      child.off('error', onError);
+      child.off('exit', onExit);
+      callback(value);
+    };
+
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', onData);
+    child.once('error', onError);
+    child.once('exit', onExit);
+  });
+}
+
+async function stopChild(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+
+  const exitPromise = once(child, 'exit');
+  child.kill('SIGTERM');
+
+  let timer;
+  try {
+    await Promise.race([
+      exitPromise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Server did not stop after SIGTERM')), 5_000);
+      }),
+    ]);
+  } catch {
+    child.kill('SIGKILL');
+    if (child.exitCode === null && child.signalCode === null) {
+      await once(child, 'exit');
+    }
+  } finally {
+    clearTimeout(timer);
+  }
 }

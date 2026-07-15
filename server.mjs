@@ -1,14 +1,11 @@
 import { createServer } from 'http';
 import next from 'next';
 import { WebSocketServer } from 'ws';
-import {
-  loadServerConfig,
-  synchronizeServerEnvironmentSnapshot,
-} from './src/server/server-port.mjs';
+import { loadServerConfig } from './src/server/server-port.mjs';
 
 const REALTIME_SERVER_KEY = Symbol.for('modpack-maker.realtime.server');
 const dev = process.env.NODE_ENV !== 'production';
-const { hostname, port } = loadServerConfig(process.cwd(), dev);
+const { hostname, port } = loadServerConfig(process.cwd());
 
 async function main() {
   let handleRequest = null;
@@ -24,7 +21,6 @@ async function main() {
   });
 
   const app = next({ dev, hostname, port });
-  synchronizeServerEnvironmentSnapshot();
   await app.prepare();
 
   handleRequest = app.getRequestHandler();

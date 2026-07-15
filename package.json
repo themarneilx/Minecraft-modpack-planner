@@ -11,9 +11,9 @@
     "test": "node --import tsx --test src/lib/*.test.ts src/server/*.test.ts src/server/*.test.mjs"
   },
   "dependencies": {
-    "@next/env": "16.2.4",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "dotenv": "^17.4.2",
     "lucide-react": "^1.9.0",
     "next": "16.2.4",
     "pg": "^8.20.0",
@@ -26,7 +26,6 @@
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/ws": "^8.18.1",
-    "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tsx": "^4.21.0",

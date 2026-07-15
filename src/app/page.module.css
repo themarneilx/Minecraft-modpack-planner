@@ -1,4 +1,8 @@
 /* Pack Info Bar */
+.headerShell {
+  display: contents;
+}
+
 .packInfo {
   display: flex;
   align-items: center;
@@ -430,17 +434,46 @@
   transform: translateY(-1px);
 }
 
+@media (max-width: 1120px) {
+  .headerShell > header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .packInfo {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .packInfoLeft {
+    order: 1;
+    flex-wrap: wrap;
+  }
+
+  .packActions {
+    order: 3;
+    width: 100%;
+    grid-template-columns: minmax(260px, 320px) minmax(180px, 1fr) auto;
+  }
+
+  .packStats {
+    order: 2;
+    flex: 0 0 auto;
+  }
+}
+
 @media (max-width: 768px) {
   .packInfo { align-items: stretch; flex-direction: column; gap: 12px; padding: 16px; }
   .packInfoLeft { flex-wrap: wrap; }
   .packActions {
+    order: 2;
     width: 100%;
     grid-template-columns: minmax(0, 1fr) auto;
   }
   .finderSlot { grid-column: 1 / -1; }
   .sortControl { grid-column: 1; }
   .settingsBtn { grid-column: 2; justify-content: center; }
-  .packStats { justify-content: flex-end; }
+  .packStats { order: 3; justify-content: flex-end; }
   .grid { grid-template-columns: 1fr; padding: 16px; gap: 12px; }
   .selectionToolbar { right: 16px; bottom: 16px; left: 16px; }
   .selectionHint { display: none; }

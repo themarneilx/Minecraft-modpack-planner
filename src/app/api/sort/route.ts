@@ -1,10 +1,13 @@
 import { Prisma } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { parseBoardSortPayload } from '@/lib/board-sort-payload';
+import { hasCompleteBoardSortCoverage } from '@/lib/board-sort-snapshot';
 import { prisma } from '@/lib/prisma';
 import { getMutationClientId, notifyAppDataUpdated } from '@/server/app-updates';
 
-class SortTargetNotFoundError extends Error {}
+class BoardSortConflictError extends Error {}
+
+const BOARD_SORT_CONFLICT_MESSAGE = 'Board changed before sorting. Refresh and try again.';
 
 export async function PATCH(request: Request) {
   let body: unknown;
@@ -23,17 +26,38 @@ export async function PATCH(request: Request) {
 
   try {
     await prisma.$transaction(async (tx) => {
-      const referencedCategoryIds = [
-        ...(payload.categoryIds ?? []),
-        ...(payload.categories?.map((category) => category.categoryId) ?? []),
-      ];
-      const uniqueCategoryIds = [...new Set(referencedCategoryIds)];
-      const categoryCount = await tx.category.count({
-        where: { id: { in: uniqueCategoryIds } },
-      });
+      if (payload.categories) {
+        await tx.$executeRaw(
+          Prisma.sql`LOCK TABLE "categories", "mods" IN SHARE ROW EXCLUSIVE MODE`,
+        );
+      } else {
+        await tx.$executeRaw(
+          Prisma.sql`LOCK TABLE "categories" IN SHARE ROW EXCLUSIVE MODE`,
+        );
+      }
 
-      if (categoryCount !== uniqueCategoryIds.length) {
-        throw new SortTargetNotFoundError('One or more categories were not found');
+      const currentCategories = await tx.category.findMany({
+        select: { id: true },
+      });
+      const currentMods = payload.categories
+        ? await tx.mod.findMany({ select: { id: true, categoryId: true } })
+        : [];
+      const modIdsByCategory = new Map(
+        currentCategories.map((category) => [category.id, [] as number[]]),
+      );
+
+      for (const mod of currentMods) {
+        modIdsByCategory.get(mod.categoryId)?.push(mod.id);
+      }
+
+      if (!hasCompleteBoardSortCoverage(payload, {
+        categoryIds: currentCategories.map((category) => category.id),
+        categories: currentCategories.map((category) => ({
+          categoryId: category.id,
+          modIds: modIdsByCategory.get(category.id) ?? [],
+        })),
+      })) {
+        throw new BoardSortConflictError(BOARD_SORT_CONFLICT_MESSAGE);
       }
 
       if (payload.categoryIds) {
@@ -52,7 +76,7 @@ export async function PATCH(request: Request) {
         );
 
         if (affectedCategories !== payload.categoryIds.length) {
-          throw new SortTargetNotFoundError('One or more categories were not found');
+          throw new BoardSortConflictError(BOARD_SORT_CONFLICT_MESSAGE);
         }
       }
 
@@ -82,15 +106,13 @@ export async function PATCH(request: Request) {
         );
 
         if (affectedMods !== rows.length) {
-          throw new SortTargetNotFoundError(
-            'One or more mods were not found in their referenced categories',
-          );
+          throw new BoardSortConflictError(BOARD_SORT_CONFLICT_MESSAGE);
         }
       }
     });
   } catch (err) {
-    if (err instanceof SortTargetNotFoundError) {
-      return NextResponse.json({ error: err.message }, { status: 404 });
+    if (err instanceof BoardSortConflictError) {
+      return NextResponse.json({ error: BOARD_SORT_CONFLICT_MESSAGE }, { status: 409 });
     }
 
     console.error('Failed to sort board', err);

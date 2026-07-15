@@ -22,3 +22,13 @@ export function getBoardSortStatus(scope: BoardSortScope) {
       return 'Categories and mods sorted A-Z and saved.';
   }
 }
+
+export function canStartBoardSort(categoryCount: number, isSyncing: boolean) {
+  return categoryCount > 0 && !isSyncing;
+}
+
+export function getBoardSortControlLabel(isSorting: boolean, isSyncing: boolean) {
+  if (isSorting) return 'Sorting...';
+  if (isSyncing) return 'Syncing...';
+  return 'Sort A-Z';
+}

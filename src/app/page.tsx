@@ -17,6 +17,8 @@ import {
 } from '@/lib/board-tools';
 import {
   BOARD_SORT_OPTIONS,
+  canStartBoardSort,
+  getBoardSortControlLabel,
   getBoardSortStatus,
   parseBoardSortSelection,
 } from '@/lib/board-sort-ui';
@@ -54,6 +56,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSorting, setIsSorting] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [boardActionStatus, setBoardActionStatus] = useState<{ id: number; message: string } | null>(null);
 
@@ -347,13 +350,17 @@ export default function Home() {
   }
 
   async function handleAlphabeticalSort(scope: BoardSortScope) {
-    if (!data || activeSyncCountRef.current > 0) return;
+    if (!data || !canStartBoardSort(
+      data.categories.length,
+      activeSyncCountRef.current > 0,
+    )) return;
 
     const sortedCategories = sortBoardAlphabetically(data.categories, scope);
     const payload = buildBoardSortPayload(sortedCategories, scope);
 
     setData({ ...data, categories: sortedCategories });
     setSelectedModIds(new Set());
+    setIsSorting(true);
 
     const finishSync = beginSync();
 
@@ -374,6 +381,7 @@ export default function Home() {
       announceBoardAction('Could not save the alphabetical sort. Restoring the saved board order.');
       await fetchData();
     } finally {
+      setIsSorting(false);
       finishSync();
     }
   }
@@ -845,7 +853,9 @@ export default function Home() {
 
   return (
     <>
-      <Header statuses={data.statuses} isSyncing={isSyncing} lastUpdatedAt={lastUpdatedAt} />
+      <div className={styles.headerShell}>
+        <Header statuses={data.statuses} isSyncing={isSyncing} lastUpdatedAt={lastUpdatedAt} />
+      </div>
 
       {/* Pack Info */}
       <div className={styles.packInfo}>
@@ -917,14 +927,14 @@ export default function Home() {
               id="board-sort"
               className={styles.sortSelect}
               value=""
-              disabled={isSyncing}
+              disabled={isSyncing || data.categories.length === 0}
               onChange={(event) => {
                 const scope = parseBoardSortSelection(event.currentTarget.value);
                 event.currentTarget.value = '';
                 if (scope) void handleAlphabeticalSort(scope);
               }}
             >
-              <option value="" disabled>{isSyncing ? 'Sorting...' : 'Sort A-Z'}</option>
+              <option value="" disabled>{getBoardSortControlLabel(isSorting, isSyncing)}</option>
               {BOARD_SORT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}

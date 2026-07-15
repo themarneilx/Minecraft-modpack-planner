@@ -7,7 +7,7 @@ import CategoryCard from '@/components/CategoryCard/CategoryCard';
 import SearchModal from '@/components/SearchModal/SearchModal';
 import StatusPicker from '@/components/StatusPicker/StatusPicker';
 import SettingsModal from '@/components/SettingsModal/SettingsModal';
-import { parseAppDataPayload } from '@/lib/app-data';
+import { readAppDataResponse } from '@/lib/app-data';
 import { TREE_LOGO_ALT, TREE_LOGO_SRC } from '@/lib/brand-assets';
 import type { DragPointer } from '@/lib/drag-auto-scroll';
 import { getCategoryDropTargetFromPoint, type CategoryDropTargetRect } from '@/lib/category-drop-target';
@@ -122,15 +122,7 @@ export default function Home() {
 
     try {
       const res = await fetch('/api/data');
-      const json: unknown = await res.json();
-      const appData = parseAppDataPayload(json);
-
-      if (!res.ok || !appData) {
-        const errorMessage = json && typeof json === 'object' && 'error' in json
-          ? String((json as { error: unknown }).error)
-          : `Failed to load data with status ${res.status}`;
-        throw new Error(errorMessage);
-      }
+      const appData = await readAppDataResponse(res);
 
       setData(appData);
       const availableModIds = new Set(appData.categories.flatMap((category) => category.mods.map((mod) => mod.id)));

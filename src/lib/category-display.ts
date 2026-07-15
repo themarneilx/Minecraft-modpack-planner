@@ -9,14 +9,14 @@ export function isCategoryModHidden<TMod extends { id: number }>(
   return mods.findIndex((mod) => mod.id === modId) >= MOD_PREVIEW_LIMIT;
 }
 
-export function getCategoryModRowKey(
+export function getCategoryModHighlightPulseKey(
   modId: number,
   revealedModId: number | null,
   revealRequestId: number | null,
 ) {
   return modId === revealedModId && revealRequestId !== null
-    ? `${modId}:reveal:${revealRequestId}`
-    : modId;
+    ? `${modId}:reveal-pulse:${revealRequestId}`
+    : null;
 }
 
 export function getCategoryModDisplay<TMod extends { id: number }>(

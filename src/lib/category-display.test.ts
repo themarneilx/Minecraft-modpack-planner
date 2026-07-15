@@ -3,7 +3,7 @@ import test from 'node:test';
 import type { Mod } from './data';
 import {
   getCategoryModDisplay,
-  getCategoryModRowKey,
+  getCategoryModHighlightPulseKey,
   MOD_PREVIEW_LIMIT,
 } from './category-display';
 
@@ -77,14 +77,12 @@ test('keeps collapsed display for absent and null revealed mods', () => {
   }
 });
 
-test('changes only the matched row key for a new reveal request', () => {
-  const firstMatchedKey = getCategoryModRowKey(12, 12, 1);
-  const repeatedMatchedKey = getCategoryModRowKey(12, 12, 2);
-  const firstUnmatchedKey = getCategoryModRowKey(1, 12, 1);
-  const repeatedUnmatchedKey = getCategoryModRowKey(1, 12, 2);
+test('scopes reveal request keys to the matched highlight pulse', () => {
+  const firstPulseKey = getCategoryModHighlightPulseKey(12, 12, 1);
+  const repeatedPulseKey = getCategoryModHighlightPulseKey(12, 12, 2);
 
-  assert.equal(getCategoryModRowKey(12, 12, 1), firstMatchedKey);
-  assert.notEqual(repeatedMatchedKey, firstMatchedKey);
-  assert.equal(firstUnmatchedKey, 1);
-  assert.equal(repeatedUnmatchedKey, firstUnmatchedKey);
+  assert.equal(getCategoryModHighlightPulseKey(12, 12, 1), firstPulseKey);
+  assert.notEqual(repeatedPulseKey, firstPulseKey);
+  assert.equal(getCategoryModHighlightPulseKey(1, 12, 2), null);
+  assert.equal(getCategoryModHighlightPulseKey(12, 12, null), null);
 });

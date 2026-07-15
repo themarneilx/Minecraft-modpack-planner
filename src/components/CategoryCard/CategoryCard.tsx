@@ -4,7 +4,7 @@ import { createElement, useLayoutEffect, useRef, useState, type DragEvent } from
 import type { Category, Mod, StatusInfo } from '@/lib/data';
 import {
   getCategoryModDisplay,
-  getCategoryModRowKey,
+  getCategoryModHighlightPulseKey,
   isCategoryModHidden,
 } from '@/lib/category-display';
 import { normalizeModStatusKeys } from '@/lib/mod-statuses';
@@ -225,6 +225,11 @@ export default function CategoryCard({
                 const isDragging = draggingModIds.has(mod.id);
                 const isPending = mod.id < 0;
                 const isSearchMatch = mod.id === revealedModId;
+                const highlightPulseKey = getCategoryModHighlightPulseKey(
+                  mod.id,
+                  revealedModId,
+                  revealRequestId,
+                );
                 const statusItems = normalizeModStatusKeys(mod).map((key) => ({
                   key,
                   label: statusMap[key]?.label ?? key,
@@ -233,7 +238,7 @@ export default function CategoryCard({
                 const statusTitle = statusItems.map((status) => status.label).join(', ');
                 return (
                   <div
-                    key={getCategoryModRowKey(mod.id, revealedModId, revealRequestId)}
+                    key={mod.id}
                     className={styles.modRow}
                     data-mod-row-id={mod.id}
                   >
@@ -328,6 +333,13 @@ export default function CategoryCard({
                       >
                         &times;
                       </button>
+                      {highlightPulseKey !== null ? (
+                        <span
+                          key={highlightPulseKey}
+                          className={styles.searchMatchPulse}
+                          aria-hidden="true"
+                        />
+                      ) : null}
                     </div>
                   </div>
                 );

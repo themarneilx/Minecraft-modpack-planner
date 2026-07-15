@@ -1,15 +1,18 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parseServerPort } from './server-port.mjs';
 
+const CHILD_PROCESS_TIMEOUT_MS = 10_000;
 const projectDir = fileURLToPath(new URL('../../', import.meta.url));
 const serverPath = fileURLToPath(new URL('../../server.mjs', import.meta.url));
 const serverPortModuleUrl = new URL('./server-port.mjs', import.meta.url).href;
+const nextEnvModuleUrl = pathToFileURL(createRequire(import.meta.url).resolve('@next/env')).href;
 
 test('defaults to port 3000 when PORT is missing or blank', () => {
   assert.equal(parseServerPort(undefined), 3000);
@@ -62,14 +65,41 @@ test('prefers process PORT over a root env file value', () => {
   });
 });
 
+test('preserves runtime environment additions across forced env reloads', () => {
+  const childScript = `
+    import nextEnv from ${JSON.stringify(nextEnvModuleUrl)};
+    import {
+      loadServerConfig,
+      synchronizeServerEnvironmentSnapshot,
+    } from ${JSON.stringify(serverPortModuleUrl)};
+
+    loadServerConfig(process.cwd(), true);
+    process.env.TURBOPACK = 'auto';
+    process.env.RUNTIME_SNAPSHOT_TEST_FLAG = 'preserved';
+    synchronizeServerEnvironmentSnapshot();
+    nextEnv.loadEnvConfig(process.cwd(), true, console, true);
+
+    process.stdout.write(JSON.stringify({
+      turbopack: process.env.TURBOPACK,
+      genericFlag: process.env.RUNTIME_SNAPSHOT_TEST_FLAG,
+    }));
+  `;
+
+  assert.deepEqual(runChildInTemporaryProject('PORT=3102\n', childScript), {
+    turbopack: 'auto',
+    genericFlag: 'preserved',
+  });
+});
+
 test('custom server reaches PORT validation during startup', () => {
   const result = spawnSync(process.execPath, [serverPath], {
     cwd: projectDir,
     env: { ...process.env, NODE_ENV: 'development', PORT: '1.5' },
     encoding: 'utf8',
+    timeout: CHILD_PROCESS_TIMEOUT_MS,
   });
 
-  assert.equal(result.status, 1);
+  assertChildCompleted(result, 1);
   assert.match(
     result.stderr,
     /Invalid PORT "1\.5": expected a decimal integer from 1 to 65535/,
@@ -77,6 +107,19 @@ test('custom server reaches PORT validation during startup', () => {
 });
 
 function loadConfigInIsolatedProcess(envContents, processPort) {
+  const childScript = `
+    import { loadServerConfig } from ${JSON.stringify(serverPortModuleUrl)};
+    process.stdout.write(JSON.stringify(loadServerConfig(process.cwd(), true)));
+  `;
+
+  return runChildInTemporaryProject(
+    envContents,
+    childScript,
+    processPort === undefined ? {} : { PORT: processPort },
+  );
+}
+
+function runChildInTemporaryProject(envContents, childScript, environmentOverrides = {}) {
   const temporaryProjectDir = mkdtempSync(join(tmpdir(), 'modpack-maker-server-port-'));
 
   try {
@@ -85,16 +128,11 @@ function loadConfigInIsolatedProcess(envContents, processPort) {
     const childEnv = { ...process.env, NODE_ENV: 'development' };
     delete childEnv.HOST;
     delete childEnv.PORT;
+    delete childEnv.RUNTIME_SNAPSHOT_TEST_FLAG;
+    delete childEnv.TURBOPACK;
     delete childEnv.__NEXT_PROCESSED_ENV;
+    Object.assign(childEnv, environmentOverrides);
 
-    if (processPort !== undefined) {
-      childEnv.PORT = processPort;
-    }
-
-    const childScript = `
-      import { loadServerConfig } from ${JSON.stringify(serverPortModuleUrl)};
-      process.stdout.write(JSON.stringify(loadServerConfig(process.cwd(), true)));
-    `;
     const result = spawnSync(
       process.execPath,
       ['--input-type=module', '--eval', childScript],
@@ -102,12 +140,22 @@ function loadConfigInIsolatedProcess(envContents, processPort) {
         cwd: temporaryProjectDir,
         env: childEnv,
         encoding: 'utf8',
+        timeout: CHILD_PROCESS_TIMEOUT_MS,
       },
     );
 
-    assert.equal(result.status, 0, result.stderr);
+    assertChildCompleted(result, 0);
     return JSON.parse(result.stdout);
   } finally {
     rmSync(temporaryProjectDir, { recursive: true, force: true });
   }
+}
+
+function assertChildCompleted(result, expectedStatus) {
+  if (result.error) {
+    assert.fail(`Child process error (${result.error.code || 'unknown'}): ${result.error.message}`);
+  }
+
+  assert.equal(result.signal, null, `Child process terminated by signal ${result.signal}`);
+  assert.equal(result.status, expectedStatus, result.stderr);
 }

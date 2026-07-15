@@ -1,6 +1,6 @@
 import nextEnv from '@next/env';
 
-const { loadEnvConfig } = nextEnv;
+const { loadEnvConfig, updateInitialEnv } = nextEnv;
 const DEFAULT_SERVER_PORT = 3000;
 const PORT_ERROR_SUFFIX = 'expected a decimal integer from 1 to 65535';
 
@@ -11,6 +11,10 @@ export function loadServerConfig(projectDir, dev) {
     hostname: process.env.HOST || '0.0.0.0',
     port: parseServerPort(process.env.PORT),
   };
+}
+
+export function synchronizeServerEnvironmentSnapshot() {
+  updateInitialEnv({ ...process.env });
 }
 
 export function parseServerPort(value) {

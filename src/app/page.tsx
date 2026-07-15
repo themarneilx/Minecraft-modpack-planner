@@ -9,7 +9,17 @@ import SearchModal from '@/components/SearchModal/SearchModal';
 import StatusPicker from '@/components/StatusPicker/StatusPicker';
 import SettingsModal from '@/components/SettingsModal/SettingsModal';
 import { readAppDataResponse } from '@/lib/app-data';
-import type { BoardModSearchResult } from '@/lib/board-tools';
+import {
+  buildBoardSortPayload,
+  sortBoardAlphabetically,
+  type BoardModSearchResult,
+  type BoardSortScope,
+} from '@/lib/board-tools';
+import {
+  BOARD_SORT_OPTIONS,
+  getBoardSortStatus,
+  parseBoardSortSelection,
+} from '@/lib/board-sort-ui';
 import { TREE_LOGO_ALT, TREE_LOGO_SRC } from '@/lib/brand-assets';
 import type { DragPointer } from '@/lib/drag-auto-scroll';
 import { getCategoryDropTargetFromPoint, type CategoryDropTargetRect } from '@/lib/category-drop-target';
@@ -45,6 +55,7 @@ export default function Home() {
   const [loadError, setLoadError] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [boardActionStatus, setBoardActionStatus] = useState<{ id: number; message: string } | null>(null);
 
   // Search modal
   const [searchOpen, setSearchOpen] = useState(false);
@@ -80,6 +91,7 @@ export default function Home() {
   const clientIdRef = useRef('');
   const nextTemporaryModIdRef = useRef(-1);
   const nextRevealRequestIdRef = useRef(0);
+  const nextBoardActionStatusIdRef = useRef(0);
   const initialLoadStartedAtRef = useRef<number | null>(null);
   const initialLoadSettledRef = useRef(false);
   const revealedModExists = revealedMod !== null
@@ -118,6 +130,11 @@ export default function Home() {
       ...(includeJson && { 'Content-Type': 'application/json' }),
       [REALTIME_CLIENT_HEADER]: getClientId(),
     };
+  }
+
+  function announceBoardAction(message: string) {
+    nextBoardActionStatusIdRef.current += 1;
+    setBoardActionStatus({ id: nextBoardActionStatusIdRef.current, message });
   }
 
   async function fetchData() {
@@ -326,6 +343,39 @@ export default function Home() {
       modId: result.modId,
       requestId: nextRevealRequestIdRef.current,
     });
+    announceBoardAction(`Located ${result.modName} in ${result.categoryName}.`);
+  }
+
+  async function handleAlphabeticalSort(scope: BoardSortScope) {
+    if (!data || activeSyncCountRef.current > 0) return;
+
+    const sortedCategories = sortBoardAlphabetically(data.categories, scope);
+    const payload = buildBoardSortPayload(sortedCategories, scope);
+
+    setData({ ...data, categories: sortedCategories });
+    setSelectedModIds(new Set());
+
+    const finishSync = beginSync();
+
+    try {
+      const response = await fetch('/api/sort', {
+        method: 'PATCH',
+        headers: getMutationHeaders(),
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Alphabetical sort failed with status ${response.status}`);
+      }
+
+      announceBoardAction(getBoardSortStatus(scope));
+    } catch (error) {
+      console.error('Failed to save alphabetical sort:', error);
+      announceBoardAction('Could not save the alphabetical sort. Restoring the saved board order.');
+      await fetchData();
+    } finally {
+      finishSync();
+    }
   }
 
   async function handleModAdded(categoryId: number, mod: { name: string; statusKey: string; source: string; url: string }) {
@@ -843,8 +893,44 @@ export default function Home() {
           </span>
         </div>
         <div className={styles.packActions}>
-          <BoardModFinder categories={data.categories} onSelect={handleBoardModSelect} />
-          <button className={styles.settingsBtn} onClick={() => setSettingsOpen(true)}>
+          <div className={styles.finderSlot}>
+            <BoardModFinder categories={data.categories} onSelect={handleBoardModSelect} />
+          </div>
+          <div className={styles.sortControl}>
+            <label className={styles.srOnly} htmlFor="board-sort">
+              Sort board alphabetically
+            </label>
+            <svg
+              className={styles.sortIcon}
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
+              <path d="M3 7h7M3 12h5M3 17h3" />
+              <path d="m16 4 4 4-4 4M20 8v12" />
+            </svg>
+            <select
+              id="board-sort"
+              className={styles.sortSelect}
+              value=""
+              disabled={isSyncing}
+              onChange={(event) => {
+                const scope = parseBoardSortSelection(event.currentTarget.value);
+                event.currentTarget.value = '';
+                if (scope) void handleAlphabeticalSort(scope);
+              }}
+            >
+              <option value="" disabled>{isSyncing ? 'Sorting...' : 'Sort A-Z'}</option>
+              {BOARD_SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+          <button type="button" className={styles.settingsBtn} onClick={() => setSettingsOpen(true)}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.2a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.6a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.2a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.2a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.6a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.2a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z" />
               <circle cx="12" cy="12" r="3.2" />
@@ -863,6 +949,18 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {boardActionStatus ? (
+        <p
+          key={boardActionStatus.id}
+          className={styles.srOnly}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {boardActionStatus.message}
+        </p>
+      ) : null}
 
       {selectedModIds.size > 0 && (
         <div

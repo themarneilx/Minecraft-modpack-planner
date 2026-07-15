@@ -46,6 +46,33 @@ test('parses a mod-only order including an empty category', () => {
   );
 });
 
+test('accepts PostgreSQL Int maximum IDs', () => {
+  assert.deepEqual(
+    parseBoardSortPayload({
+      categoryIds: [2_147_483_647],
+      categories: [{ categoryId: 2_147_483_647, modIds: [2_147_483_647] }],
+    }),
+    {
+      categoryIds: [2_147_483_647],
+      categories: [{ categoryId: 2_147_483_647, modIds: [2_147_483_647] }],
+    },
+  );
+});
+
+test('rejects IDs above the PostgreSQL Int maximum', () => {
+  const outOfRangeId = 2_147_483_648;
+
+  assert.equal(parseBoardSortPayload({ categoryIds: [outOfRangeId] }), null);
+  assert.equal(
+    parseBoardSortPayload({ categories: [{ categoryId: outOfRangeId, modIds: [] }] }),
+    null,
+  );
+  assert.equal(
+    parseBoardSortPayload({ categories: [{ categoryId: 1, modIds: [outOfRangeId] }] }),
+    null,
+  );
+});
+
 const invalidPayloads: Array<{ name: string; value: unknown }> = [
   { name: 'null payload', value: null },
   { name: 'undefined payload', value: undefined },

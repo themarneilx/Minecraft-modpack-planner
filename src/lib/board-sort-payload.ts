@@ -13,7 +13,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function isPositiveInteger(value: unknown): value is number {
-  return Number.isInteger(value) && Number(value) > 0;
+  return Number.isInteger(value) && Number(value) > 0 && Number(value) <= 2_147_483_647;
 }
 
 export function parseBoardSortPayload(value: unknown): ParsedBoardSortPayload | null {

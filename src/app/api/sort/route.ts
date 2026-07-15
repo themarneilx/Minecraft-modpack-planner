@@ -88,15 +88,20 @@ export async function PATCH(request: Request) {
         }
       }
     });
-
-    await notifyAppDataUpdated(getMutationClientId(request));
-    return NextResponse.json({ success: true });
   } catch (err) {
     if (err instanceof SortTargetNotFoundError) {
       return NextResponse.json({ error: err.message }, { status: 404 });
     }
 
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('Failed to sort board', err);
+    return NextResponse.json({ error: 'Failed to sort board' }, { status: 500 });
   }
+
+  try {
+    await notifyAppDataUpdated(getMutationClientId(request));
+  } catch (err) {
+    console.error('Board sort committed but update notification failed', err);
+  }
+
+  return NextResponse.json({ success: true });
 }

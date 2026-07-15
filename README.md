@@ -24,6 +24,9 @@ It is designed for one shared modpack that everyone sees at the same time: add m
 - **Drag-and-drop category reordering** from the card title bar, including each card's mod contents
 - **Stable placement indicators** for category and mod moves, including grid-gap category drop targets
 - **Collapsed long category lists** that show the first 10 mods with a "show more" control
+- **Persisted alphabetical sorting** for category cards, every category's mod list, or both at once
+- **Board-wide added-mod finder** with category-aware results, automatic hidden-list expansion, smooth scrolling, and result highlighting
+- **Keyboard-accessible finder controls** with combobox navigation, result announcements, and duplicate mod names distinguished by category
 - **Manual mod entry** for anything not added through search
 
 ### Mod Search
@@ -99,6 +102,7 @@ Create a PostgreSQL database, then add a `.env` file in the project root:
 ```env
 DATABASE_URL="postgresql://username:password@localhost:5432/modpack"
 CURSEFORGE_API_KEY="\$2a\$10\$paste-your-curseforge-api-key-here"
+PORT=3000
 ```
 
 `CURSEFORGE_API_KEY` is only required for CurseForge search. Modrinth search works without it.
@@ -111,6 +115,26 @@ To get a CurseForge API key:
 - Open the CurseForge for Studios developer console
 - Generate an API key, then paste it into `.env` as `CURSEFORGE_API_KEY`
 - Restart `npm run dev` or `npm start` after changing `.env`
+
+The custom server resolves only `PORT` and `HOST` before binding. `src/server/server-port.mjs` reads them with `dotenv.parse` without changing `process.env` or Next.js runtime environment state. Values use Next-style precedence, from highest to lowest:
+
+1. Existing process environment variables
+2. `.env.<NODE_ENV>.local`
+3. `.env.local` except when `NODE_ENV=test`
+4. `.env.<NODE_ENV>`
+5. `.env`
+
+Set a persistent local port in an environment file or override it for one command:
+
+```bash
+# .env
+PORT=3100
+
+# One-command production override
+PORT=3200 npm start
+```
+
+`PORT` must be a decimal integer from `1` through `65535`. It defaults to `3000` when omitted or blank.
 
 ### 3. Push the schema and generate Prisma Client
 
@@ -143,12 +167,16 @@ Open `http://localhost:3000`.
 
 `npm run dev` starts the custom Node server, not plain `next dev`. That server hosts both the Next.js app and the WebSocket endpoint used for live sync.
 
+If you configured another `PORT`, open that port instead. For example, `PORT=3100` serves the app at `http://localhost:3100` and WebSockets at `/ws` on the same server.
+
 ### Production
 
 ```bash
 npm run build
 npm start
 ```
+
+When deploying behind Nginx, Caddy, Apache, or another reverse proxy, forward normal HTTP requests and WebSocket upgrade requests for `/ws` to the same configured `PORT`. Sending `/ws` to a different or stale port prevents realtime updates even if the page itself loads.
 
 ---
 
@@ -185,6 +213,7 @@ modpack-maker/
 │   ├── app/
 │   │   ├── api/
 │   │   │   ├── data/route.ts
+│   │   │   ├── sort/route.ts       # Atomic persisted alphabetical sorting
 │   │   │   ├── pack/route.ts
 │   │   │   ├── statuses/route.ts
 │   │   │   ├── statuses/[id]/route.ts
@@ -200,6 +229,7 @@ modpack-maker/
 │   │   ├── page.tsx               # Main shared board + websocket client
 │   │   └── page.module.css
 │   ├── components/
+│   │   ├── BoardModFinder/         # Accessible current-board mod finder
 │   │   ├── CategoryCard/
 │   │   ├── Header/
 │   │   ├── IconPicker/
@@ -208,6 +238,10 @@ modpack-maker/
 │   │   ├── SettingsModal/
 │   │   └── StatusPicker/
 │   ├── lib/
+│   │   ├── board-finder-navigation.ts # Finder keyboard and result identity helpers
+│   │   ├── board-sort-payload.ts   # Sort API payload validation
+│   │   ├── board-sort-ui.ts        # Sort control options and status messages
+│   │   ├── board-tools.ts          # Alphabetical sorting, payload, and finder helpers
 │   │   ├── category-display.ts     # 10-mod preview and show-more helper
 │   │   ├── category-drop-target.ts # Visual category drag target helper
 │   │   ├── data.ts
@@ -221,8 +255,10 @@ modpack-maker/
 │   │   ├── realtime-protocol.ts    # Per-tab mutation and websocket message protocol
 │   │   └── search.ts              # Search URL and auto-search helpers
 │   └── server/
+│       ├── app-updates.ts          # Mutation metadata and realtime notification helper
 │       ├── curseforge-env.ts      # CurseForge API key loader and diagnostics
-│       └── realtime.ts            # Broadcast helper used by route handlers
+│       ├── realtime.ts            # Broadcast helper used by route handlers
+│       └── server-port.mjs         # Read-only PORT/HOST environment resolver
 ├── package.json
 └── README.md
 ```
@@ -249,6 +285,7 @@ modpack-maker/
 | PUT | `/api/mods/:id` | Update a mod |
 | DELETE | `/api/mods/:id` | Delete a mod |
 | PATCH | `/api/mods/reorder` | Move or reorder mods across categories |
+| PATCH | `/api/sort` | Persist category A-Z order, mod A-Z order, or both |
 | GET | `/api/search/curseforge` | Search CurseForge |
 | GET | `/api/search/modrinth` | Search Modrinth |
 
@@ -294,6 +331,23 @@ The route updates each listed mod's `categoryId` and `sortOrder` with one bulk S
 
 The route updates every listed category's `sortOrder` with one bulk SQL statement inside a transaction, then broadcasts the realtime sync event.
 
+### Board Sort Payload
+
+`PATCH /api/sort` accepts `categoryIds`, `categories`, or both. The client sends the combined form when sorting the entire board:
+
+```json
+{
+  "categoryIds": [3, 1, 2],
+  "categories": [
+    { "categoryId": 3, "modIds": [31, 32] },
+    { "categoryId": 1, "modIds": [10, 11, 12] },
+    { "categoryId": 2, "modIds": [20, 21] }
+  ]
+}
+```
+
+`categoryIds` persists category-card positions. Each `categories` entry persists the listed mods' positions within that category. When both fields are present, all category and mod sort-order updates run in one database transaction. After the transaction commits, the route emits one realtime invalidation so other connected clients refresh once.
+
 ---
 
 ## Troubleshooting
@@ -305,6 +359,8 @@ The route updates every listed category's `sortOrder` with one bulk SQL statemen
 | Missing tables | Run `npx prisma db push` |
 | Empty board after setup | Run `npx tsx prisma/seed.ts` |
 | Realtime sync not working | Start the app with `npm run dev` or `npm start`, not plain `next dev` or `next start` |
+| Server exits with `Invalid PORT` | Use a decimal integer from `1` through `65535`; remove the value or leave it blank to use `3000` |
+| App or realtime sync fails behind a reverse proxy | Confirm HTTP and WebSocket `/ws` upgrades both target the same current `PORT`, then reload the proxy configuration |
 | CurseForge search says `CURSEFORGE_API_KEY` is not configured | Add `CURSEFORGE_API_KEY` to `.env`, then restart the server |
 | CurseForge API key was rejected | Escape `$` as `\$`, restart the server, and confirm you are using a CurseForge Core API key with access to public Minecraft mods |
 
@@ -341,6 +397,8 @@ npm run build
 - [x] Optimistic add, delete, status, and reorder updates
 - [x] Auto-search while typing
 - [x] Collapsed category previews for long mod lists
+- [x] Persisted alphabetical category and mod sorting
+- [x] Board-wide added-mod finder with reveal and highlight
 - [x] Responsive layout
 - [x] Multiple indicators or multi-status support per mod
 - [ ] Export modpack as `.txt` or `.json`

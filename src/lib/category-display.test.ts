@@ -42,3 +42,12 @@ test('shows all mods when an oversized category is expanded', () => {
   assert.equal(display.hiddenCount, 0);
   assert.deepEqual(display.visibleMods.map((item) => item.id), mods.map((item) => item.id));
 });
+
+test('shows all mods when a revealed mod is beyond the collapsed preview', () => {
+  const mods = Array.from({ length: MOD_PREVIEW_LIMIT + 2 }, (_, index) => mod(index + 1));
+  const display = getCategoryModDisplay(mods, false, MOD_PREVIEW_LIMIT + 2);
+
+  assert.equal(display.canExpand, true);
+  assert.equal(display.hiddenCount, 0);
+  assert.deepEqual(display.visibleMods.map((item) => item.id), mods.map((item) => item.id));
+});

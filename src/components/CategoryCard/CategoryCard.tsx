@@ -13,6 +13,7 @@ const MASONRY_GAP = 16;
 
 interface CategoryCardProps {
   category: Category;
+  revealedModId: number | null;
   nextCategoryId: number | null;
   statuses: StatusInfo[];
   draggingModId: number | null;
@@ -35,6 +36,7 @@ interface CategoryCardProps {
 
 export default function CategoryCard({
   category,
+  revealedModId,
   nextCategoryId,
   statuses,
   draggingModId,
@@ -58,7 +60,10 @@ export default function CategoryCard({
   const slotRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const statusMap = Object.fromEntries(statuses.map((s) => [s.key, s]));
-  const modDisplay = getCategoryModDisplay(category.mods, showAllMods);
+  const revealedModBelongsToCategory = revealedModId !== null
+    && category.mods.some((mod) => mod.id === revealedModId);
+  const modDisplay = getCategoryModDisplay(category.mods, showAllMods, revealedModId);
+  const isShowingAllMods = showAllMods || revealedModBelongsToCategory;
   const isCategoryDragging = draggingCategoryId !== null;
   const categoryDropBeforeActive = activeCategoryDropTarget?.beforeCategoryId === category.id;
   const categoryDropAfterActive = activeCategoryDropTarget?.beforeCategoryId === null && nextCategoryId === null;
@@ -67,6 +72,15 @@ export default function CategoryCard({
   function isActiveDrop(beforeModId: number | null) {
     return activeDropTarget?.targetCategoryId === category.id && activeDropTarget.beforeModId === beforeModId;
   }
+
+  useLayoutEffect(() => {
+    if (!revealedModBelongsToCategory) return;
+
+    // The helper renders the match immediately; persist that expansion outside the effect body.
+    const frameId = window.requestAnimationFrame(() => setShowAllMods(true));
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [revealedModBelongsToCategory, revealedModId]);
 
   useLayoutEffect(() => {
     const slot = slotRef.current;
@@ -205,6 +219,7 @@ export default function CategoryCard({
                 const isSelected = selectedModIds.has(mod.id);
                 const isDragging = draggingModIds.has(mod.id);
                 const isPending = mod.id < 0;
+                const isSearchMatch = mod.id === revealedModId;
                 const statusItems = normalizeModStatusKeys(mod).map((key) => ({
                   key,
                   label: statusMap[key]?.label ?? key,
@@ -225,9 +240,10 @@ export default function CategoryCard({
                       onDrop={(event) => handleDrop(event, mod.id)}
                     />
                     <div
-                      className={`${styles.modItem} ${isDragging ? styles.modItemDragging : ''} ${isSelected ? styles.modItemSelected : ''} ${isPending ? styles.modItemPending : ''}`}
+                      className={`${styles.modItem} ${isDragging ? styles.modItemDragging : ''} ${isSelected ? styles.modItemSelected : ''} ${isPending ? styles.modItemPending : ''} ${isSearchMatch ? styles.searchMatch : ''}`}
                       data-mod-id={mod.id}
                       data-category-id={category.id}
+                      data-search-highlight={isSearchMatch ? 'true' : undefined}
                       title={statusTitle}
                       draggable={!isPending}
                       onDragStart={(event) => handleDragStart(event, mod.id)}
@@ -329,7 +345,7 @@ export default function CategoryCard({
             data-show-more-mods={category.id}
             onClick={() => setShowAllMods((current) => !current)}
           >
-            {showAllMods ? 'Show less' : `Show ${modDisplay.hiddenCount} more`}
+            {isShowingAllMods ? 'Show less' : `Show ${modDisplay.hiddenCount} more`}
           </button>
         )}
 

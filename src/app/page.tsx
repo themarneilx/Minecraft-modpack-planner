@@ -3,11 +3,13 @@
 import { useState, useEffect, useRef, type DragEvent } from 'react';
 import Image from 'next/image';
 import Header from '@/components/Header/Header';
+import BoardModFinder from '@/components/BoardModFinder/BoardModFinder';
 import CategoryCard from '@/components/CategoryCard/CategoryCard';
 import SearchModal from '@/components/SearchModal/SearchModal';
 import StatusPicker from '@/components/StatusPicker/StatusPicker';
 import SettingsModal from '@/components/SettingsModal/SettingsModal';
 import { readAppDataResponse } from '@/lib/app-data';
+import type { BoardModSearchResult } from '@/lib/board-tools';
 import { TREE_LOGO_ALT, TREE_LOGO_SRC } from '@/lib/brand-assets';
 import type { DragPointer } from '@/lib/drag-auto-scroll';
 import { getCategoryDropTargetFromPoint, type CategoryDropTargetRect } from '@/lib/category-drop-target';
@@ -35,6 +37,7 @@ import {
 import styles from './page.module.css';
 
 const LOADER_OPTIONS = ['Fabric', 'Forge', 'NeoForge', 'Quilt'] as const;
+const MOD_REVEAL_DURATION_MS = 2400;
 
 export default function Home() {
   const [data, setData] = useState<AppData | null>(null);
@@ -47,6 +50,7 @@ export default function Home() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchCategoryId, setSearchCategoryId] = useState(0);
   const [searchSession, setSearchSession] = useState(0);
+  const [revealedMod, setRevealedMod] = useState<{ modId: number; requestId: number } | null>(null);
 
   // Status picker
   const [statusOpen, setStatusOpen] = useState(false);
@@ -75,8 +79,13 @@ export default function Home() {
   const activeSyncCountRef = useRef(0);
   const clientIdRef = useRef('');
   const nextTemporaryModIdRef = useRef(-1);
+  const nextRevealRequestIdRef = useRef(0);
   const initialLoadStartedAtRef = useRef<number | null>(null);
   const initialLoadSettledRef = useRef(false);
+  const revealedModExists = revealedMod !== null
+    && (data?.categories.some((category) =>
+      category.mods.some((mod) => mod.id === revealedMod.modId),
+    ) ?? false);
 
   function beginSync() {
     activeSyncCountRef.current += 1;
@@ -165,6 +174,52 @@ export default function Home() {
     // The initial load uses refs and stable state setters; it should only run once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!revealedMod) return;
+
+    const { modId, requestId } = revealedMod;
+    let secondFrameId: number | null = null;
+    let clearTimerId: number | null = null;
+
+    function clearReveal() {
+      setRevealedMod((current) =>
+        current?.requestId === requestId ? null : current,
+      );
+    }
+
+    const firstFrameId = window.requestAnimationFrame(() => {
+      secondFrameId = window.requestAnimationFrame(() => {
+        const target = Array.from(
+          categoryGridRef.current?.querySelectorAll<HTMLElement>('[data-mod-id]') ?? [],
+        ).find((element) => Number(element.dataset.modId) === modId);
+
+        if (!revealedModExists || !target) {
+          clearReveal();
+          return;
+        }
+
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        target.scrollIntoView({
+          block: 'center',
+          inline: 'nearest',
+          behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        });
+
+        clearTimerId = window.setTimeout(clearReveal, MOD_REVEAL_DURATION_MS);
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrameId);
+      if (secondFrameId !== null) {
+        window.cancelAnimationFrame(secondFrameId);
+      }
+      if (clearTimerId !== null) {
+        window.clearTimeout(clearTimerId);
+      }
+    };
+  }, [revealedMod, revealedModExists]);
 
   useDragAutoScroll(
     dragState !== null || draggingCategoryId !== null,
@@ -263,6 +318,14 @@ export default function Home() {
     setSearchCategoryId(categoryId);
     setSearchSession((current) => current + 1);
     setSearchOpen(true);
+  }
+
+  function handleBoardModSelect(result: BoardModSearchResult) {
+    nextRevealRequestIdRef.current += 1;
+    setRevealedMod({
+      modId: result.modId,
+      requestId: nextRevealRequestIdRef.current,
+    });
   }
 
   async function handleModAdded(categoryId: number, mod: { name: string; statusKey: string; source: string; url: string }) {
@@ -780,6 +843,7 @@ export default function Home() {
           </span>
         </div>
         <div className={styles.packActions}>
+          <BoardModFinder categories={data.categories} onSelect={handleBoardModSelect} />
           <button className={styles.settingsBtn} onClick={() => setSettingsOpen(true)}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.2a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.6a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.2a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.2a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.6a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.2a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z" />
@@ -825,6 +889,7 @@ export default function Home() {
           <CategoryCard
             key={cat.id}
             category={cat}
+            revealedModId={revealedMod?.modId ?? null}
             nextCategoryId={data.categories[index + 1]?.id ?? null}
             statuses={data.statuses}
             draggingModId={dragState?.modId ?? null}

@@ -1,8 +1,18 @@
 import type { BoardCategoryOrder, ParsedBoardSortPayload } from './board-sort-payload';
+import {
+  compareBoardNamedItems,
+  type BoardNamedItem,
+} from './board-tools';
 
 export interface BoardSortSnapshot {
   categoryIds: number[];
   categories: BoardCategoryOrder[];
+}
+
+export interface NamedBoardSortSnapshot {
+  categories: Array<BoardNamedItem & {
+    mods: BoardNamedItem[];
+  }>;
 }
 
 function hasSameIds(left: number[], right: number[]) {
@@ -10,6 +20,11 @@ function hasSameIds(left: number[], right: number[]) {
 
   const rightIds = new Set(right);
   return left.every((id) => rightIds.has(id));
+}
+
+function hasSameOrder(left: number[], right: number[]) {
+  return left.length === right.length
+    && left.every((id, index) => id === right[index]);
 }
 
 export function hasCompleteBoardSortCoverage(
@@ -41,4 +56,48 @@ export function hasCompleteBoardSortCoverage(
   }
 
   return payload.categoryIds !== null || payload.categories !== null;
+}
+
+export function hasCurrentAlphabeticalBoardSortOrder(
+  payload: ParsedBoardSortPayload,
+  snapshot: NamedBoardSortSnapshot,
+) {
+  if (!hasCompleteBoardSortCoverage(payload, {
+    categoryIds: snapshot.categories.map((category) => category.id),
+    categories: snapshot.categories.map((category) => ({
+      categoryId: category.id,
+      modIds: category.mods.map((mod) => mod.id),
+    })),
+  })) {
+    return false;
+  }
+
+  if (payload.categoryIds) {
+    const alphabeticalCategoryIds = [...snapshot.categories]
+      .sort(compareBoardNamedItems)
+      .map((category) => category.id);
+
+    if (!hasSameOrder(payload.categoryIds, alphabeticalCategoryIds)) {
+      return false;
+    }
+  }
+
+  if (payload.categories) {
+    const categoriesById = new Map(
+      snapshot.categories.map((category) => [category.id, category]),
+    );
+
+    for (const categoryOrder of payload.categories) {
+      const category = categoriesById.get(categoryOrder.categoryId);
+      const alphabeticalModIds = [...(category?.mods ?? [])]
+        .sort(compareBoardNamedItems)
+        .map((mod) => mod.id);
+
+      if (!hasSameOrder(categoryOrder.modIds, alphabeticalModIds)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
 }

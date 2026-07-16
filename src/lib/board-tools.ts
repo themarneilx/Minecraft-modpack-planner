@@ -22,6 +22,15 @@ const boardNameCollator = new Intl.Collator('en', {
   sensitivity: 'base',
 });
 
+export interface BoardNamedItem {
+  id: number;
+  name: string;
+}
+
+export function compareBoardNamedItems(left: BoardNamedItem, right: BoardNamedItem) {
+  return boardNameCollator.compare(left.name, right.name) || left.id - right.id;
+}
+
 export function sortBoardAlphabetically(
   categories: Category[],
   scope: BoardSortScope,
@@ -29,17 +38,13 @@ export function sortBoardAlphabetically(
   const shouldSortCategories = scope === 'categories' || scope === 'all';
   const shouldSortMods = scope === 'mods' || scope === 'all';
   const orderedCategories = shouldSortCategories
-    ? [...categories].sort((left, right) =>
-        boardNameCollator.compare(left.name, right.name) || left.id - right.id,
-      )
+    ? [...categories].sort(compareBoardNamedItems)
     : [...categories];
 
   return orderedCategories.map((category, categoryIndex) => {
     const mods = shouldSortMods
       ? [...category.mods]
-          .sort((left, right) =>
-            boardNameCollator.compare(left.name, right.name) || left.id - right.id,
-          )
+          .sort(compareBoardNamedItems)
           .map((mod, sortOrder) => ({ ...mod, sortOrder }))
       : category.mods;
 

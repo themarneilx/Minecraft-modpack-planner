@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { parseBoardSortPayload } from '@/lib/board-sort-payload';
-import { hasCompleteBoardSortCoverage } from '@/lib/board-sort-snapshot';
+import { hasCurrentAlphabeticalBoardSortOrder } from '@/lib/board-sort-snapshot';
 import { prisma } from '@/lib/prisma';
 import { getMutationClientId, notifyAppDataUpdated } from '@/server/app-updates';
 
@@ -37,24 +37,24 @@ export async function PATCH(request: Request) {
       }
 
       const currentCategories = await tx.category.findMany({
-        select: { id: true },
+        select: { id: true, name: true },
       });
       const currentMods = payload.categories
-        ? await tx.mod.findMany({ select: { id: true, categoryId: true } })
+        ? await tx.mod.findMany({ select: { id: true, name: true, categoryId: true } })
         : [];
-      const modIdsByCategory = new Map(
-        currentCategories.map((category) => [category.id, [] as number[]]),
+      const modsByCategory = new Map<number, Array<{ id: number; name: string }>>(
+        currentCategories.map((category) => [category.id, []]),
       );
 
       for (const mod of currentMods) {
-        modIdsByCategory.get(mod.categoryId)?.push(mod.id);
+        modsByCategory.get(mod.categoryId)?.push({ id: mod.id, name: mod.name });
       }
 
-      if (!hasCompleteBoardSortCoverage(payload, {
-        categoryIds: currentCategories.map((category) => category.id),
+      if (!hasCurrentAlphabeticalBoardSortOrder(payload, {
         categories: currentCategories.map((category) => ({
-          categoryId: category.id,
-          modIds: modIdsByCategory.get(category.id) ?? [],
+          id: category.id,
+          name: category.name,
+          mods: modsByCategory.get(category.id) ?? [],
         })),
       })) {
         throw new BoardSortConflictError(BOARD_SORT_CONFLICT_MESSAGE);

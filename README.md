@@ -48,7 +48,7 @@ It is designed for one shared modpack that everyone sees at the same time: add m
 - **Realtime sync for all connected users** via WebSockets
 - **No manual refresh needed** after mod, status, category, reorder, or pack changes
 - **Loading and syncing states** so users can see when the board is loading or saving
-- **Last write wins** conflict behavior
+- **Last write wins** for regular CRUD and drag-reorder conflicts; alphabetical sorting instead rejects stale or conflicting snapshots with `409`
 
 ### UI
 - **Pastel green visual direction** with soft, readable surfaces
@@ -347,7 +347,7 @@ The route updates every listed category's `sortOrder` with one bulk SQL statemen
 }
 ```
 
-`categoryIds` persists category-card positions. Each `categories` entry persists mod positions within that category. Every supplied dimension must be a complete snapshot of the current board in numeric-aware, case-insensitive A-Z order: all current categories for `categoryIds`, and all current categories with every current member mod for `categories`.
+`categoryIds` persists category-card positions. Each `categories` entry persists mod positions within that category. Every supplied dimension must be a complete snapshot of the current board in numeric-aware, case-insensitive A-Z order: all current categories for `categoryIds`, and all current categories with every current member mod for `categories`. When names compare equal, ascending numeric ID breaks the tie.
 
 The route takes short PostgreSQL table locks while it validates current IDs, category membership, and names. A stale snapshot returns a sanitized `409` with no writes or realtime notification. Otherwise, all requested updates complete in one atomic transaction followed by one realtime invalidation.
 

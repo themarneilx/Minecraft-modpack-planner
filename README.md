@@ -240,6 +240,7 @@ modpack-maker/
 │   ├── lib/
 │   │   ├── board-finder-navigation.ts # Finder keyboard and result identity helpers
 │   │   ├── board-sort-payload.ts   # Sort API payload validation
+│   │   ├── board-sort-snapshot.ts  # Current-data sort coverage and conflict checks
 │   │   ├── board-sort-ui.ts        # Sort control options and status messages
 │   │   ├── board-tools.ts          # Alphabetical sorting, payload, and finder helpers
 │   │   ├── category-display.ts     # 10-mod preview and show-more helper
@@ -346,7 +347,9 @@ The route updates every listed category's `sortOrder` with one bulk SQL statemen
 }
 ```
 
-`categoryIds` persists category-card positions. Each `categories` entry persists the listed mods' positions within that category. When both fields are present, all category and mod sort-order updates run in one database transaction. After the transaction commits, the route emits one realtime invalidation so other connected clients refresh once.
+`categoryIds` persists category-card positions. Each `categories` entry persists mod positions within that category. Every supplied dimension must be a complete snapshot of the current board in numeric-aware, case-insensitive A-Z order: all current categories for `categoryIds`, and all current categories with every current member mod for `categories`.
+
+The route takes short PostgreSQL table locks while it validates current IDs, category membership, and names. A stale snapshot returns a sanitized `409` with no writes or realtime notification. Otherwise, all requested updates complete in one atomic transaction followed by one realtime invalidation.
 
 ---
 

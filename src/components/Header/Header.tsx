@@ -29,7 +29,6 @@ export default function Header({ statuses, isSyncing, lastUpdatedAt }: HeaderPro
                 alt=""
                 width={36}
                 height={36}
-                priority
                 sizes="36px"
               />
             </span>
